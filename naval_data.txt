@@ -1,0 +1,2580 @@
+尼米兹级航空母舰是美国海军现役核动力多用途航空母舰，共建造10艘。以下为各舰信息。
+
+【CVN-68 尼米兹号】
+[SHIP]
+
+Ship_Instance: CVN-68 尼米兹号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 未知
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷
+Mast: 未知
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.8 米
+Beam: 40.8 米
+Flight_Deck_Width: 76.4 米
+Draft: 11.3 米
+Standard_Displacement: 78280 吨
+Full_Load_Displacement: 101196 吨
+Speed: 31.5 节
+Range: 无限
+Crew: 5200 人
+Aircraft_Capacity: 90 架
+Power_Output: 260000 马力
+Propulsion: 4 轴 4 桨
+Flight_Deck_Area: 约 18000 平方米
+Island_Position: 右舷
+Homeport: 埃弗里特海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+
+[CATAPULT]
+弹射器（C-13-1）
+
+[ARRESTING_GEAR]
+拦阻索（Mk 7 Mod 3 型）
+拦阻网（Mk 7 Mod 3 型）
+
+[RADAR_SYSTEM]
+AN/SPS-48C/E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67
+AN/SPQ-9A
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48C/E, AN/SPS-49(V)5, AN/SPS-43A
+对海搜索：AN/SPS-67
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9A, AN/SPQ-9B
+导航：SPS-64(V)9, URN-25
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-29
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4
+电子侦察：AN/WLR-1H
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25
+电子干扰：SLQ-29
+
+[COMBAT_SYSTEM]
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS
+战术数据：NTDS
+舰艇自卫：SSDS Mk 2
+目标搜获：MK-23 TAS
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+SRR-1
+WSC-3
+WSC-6
+USC-38
+JMCIS
+
+[COMMUNICATION_FUNCTION]
+卫星通信：SRR-1, WSC-3, WSC-6, USC-38
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：JMCIS
+联合战术系统：未知
+
+[DATA_LINK]
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+[WEAPON_SYSTEM]
+Mk 29
+RIM-7
+Mk 49
+RIM-116
+Mk 15
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 29, Mk 49
+
+[SHIPBOARD_GUN]
+Mk 38
+勃朗宁 M2
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：Mk 38
+重机枪：勃朗宁 M2
+
+[AIRCRAFT]
+F/A-18E/F
+F/A-18C/D
+E-2C
+EA-6B
+EA-18G
+S-3A/B
+SH-60F
+HH-60H
+MH-60R
+C-2
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18E/F, F/A-18C/D
+电子战飞机：EA-6B, EA-18G
+预警机：E-2C
+反潜机：S-3A/B, SH-60F, MH-60R
+侦察机：未知
+运输机：C-2
+直升机：SH-60F, HH-60H, MH-60R
+
+[ARMOR_PROTECTION]
+双层舰壳
+X 形吸能支撑结构
+HY-80 高强度钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-68 雷达套件:
+AN/SPS-48C/E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67
+AN/SPQ-9A
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+
+CVN-68 武器套件:
+Mk 29
+RIM-7
+Mk 49
+RIM-116
+Mk 15
+
+CVN-68 舰载火炮套件:
+Mk 38
+勃朗宁 M2
+
+CVN-68 电子战套件:
+AN/SLQ-32(V)4
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-29
+
+CVN-68 作战系统套件:
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+JMCIS
+
+CVN-68 通信套件:
+SRR-1
+WSC-3
+WSC-6
+USC-38
+
+CVN-68 数据链套件:
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+CVN-68 舰载机联队:
+F/A-18E/F
+F/A-18C/D
+E-2C
+EA-6B
+EA-18G
+S-3A/B
+SH-60F
+HH-60H
+MH-60R
+C-2
+
+CVN-68 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+汽轮发电机
+应急柴油发电机
+
+CVN-68 弹射器套件:
+弹射器（C-13-1）
+
+CVN-68 拦阻装置套件:
+拦阻索（Mk 7 Mod 3 型）
+拦阻网（Mk 7 Mod 3 型）
+
+CVN-68 装甲防护套件:
+双层舰壳
+X 形吸能支撑结构
+HY-80 高强度钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+[/SHIP]
+
+
+
+
+
+
+
+
+
+
+
+
+
+【CVN-69 艾森豪威尔号】
+[SHIP]
+Ship_Instance: CVN-69 艾森豪威尔号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 球鼻艏
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷，靠近舰艉
+Mast: 细长高大的柱状综合桅杆
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.8 米
+Beam: 40.8 米
+Flight_Deck_Width: 76.8 米
+Draft: 11.3 米
+Standard_Displacement: 81600 吨
+Full_Load_Displacement: 97000 吨
+Speed: 31.5 节
+Range: 无限
+Crew: 5200 人
+Aircraft_Capacity: 90 架
+Power_Output: 260000 马力
+Propulsion: 4 轴 4 桨
+Flight_Deck_Area: 约 18000 平方米
+Island_Position: 右舷
+Homeport: 诺福克海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+[CATAPULT]
+弹射器（C-13-1）
+
+[ARRESTING_GEAR]
+拦阻索（Mk 7 Mod 3 型）
+拦阻网（Mk 7 Mod 3 型）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67
+AN/SPQ-9A
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)5, AN/SPS-43A
+对海搜索：AN/SPS-67
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9A, AN/SPQ-9B
+导航：SPS-64(V)9, URN-25
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-29
+SLQ-36
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4
+电子侦察：AN/WLR-1H
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-36
+电子干扰：SLQ-29
+
+[COMBAT_SYSTEM]
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS
+战术数据：NTDS
+舰艇自卫：SSDS Mk 2
+目标搜获：MK-23 TAS
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+SRR-1
+WSC-3
+WSC-6
+USC-38
+SSQ-82
+SQQ-1
+JOTS
+POST
+CVIC
+TESS UMM-1(V)1
+JMCIS
+
+[COMMUNICATION_FUNCTION]
+卫星通信：SRR-1, WSC-3, WSC-6, USC-38, SSQ-82, SQQ-1
+战术环境支援：TESS UMM-1(V)1
+航母情报：CVIC
+指挥信息系统：POST, JMCIS
+联合战术系统：JOTS
+
+[DATA_LINK]
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+[WEAPON_SYSTEM]
+Mk 25
+Mk 29
+RIM-7
+Mk 49
+RIM-116
+Mk 15
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 25, Mk 29, Mk 49
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F/A-18E/F
+F/A-18C/D
+E-2C
+E-2D
+EA-6B
+EA-18G
+A-6E（退役）
+S-3A/B
+SH-60F
+HH-60H
+MH-60R
+C-2
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18E/F, F/A-18C/D
+电子战飞机：EA-6B, EA-18G
+预警机：E-2C, E-2D
+反潜机：S-3A/B, SH-60F, MH-60R
+侦察机：未知
+运输机：C-2
+直升机：SH-60F, HH-60H, MH-60R
+
+[ARMOR_PROTECTION]
+双层舰壳
+X 形吸能支撑结构
+HY-80 高强度钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+先进灭火系统
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-69 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67
+AN/SPQ-9A
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+
+CVN-69 武器套件:
+Mk 25
+Mk 29
+RIM-7
+Mk 49
+RIM-116
+Mk 15
+
+CVN-69 舰载火炮套件:
+未知
+
+CVN-69 电子战套件:
+AN/SLQ-32(V)4
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-29
+SLQ-36
+
+CVN-69 作战系统套件:
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+CVN-69 通信套件:
+SRR-1
+WSC-3
+WSC-6
+USC-38
+SSQ-82
+SQQ-1
+JOTS
+POST
+CVIC
+TESS UMM-1(V)1
+JMCIS
+
+CVN-69 数据链套件:
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+CVN-69 舰载机联队:
+F/A-18E/F
+F/A-18C/D
+E-2C
+E-2D
+EA-6B
+EA-18G
+A-6E（退役）
+S-3A/B
+SH-60F
+HH-60H
+MH-60R
+C-2
+
+CVN-69 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+CVN-69 弹射器套件:
+弹射器（C-13-1）
+
+CVN-69 拦阻装置套件:
+拦阻索（Mk 7 Mod 3 型）
+拦阻网（Mk 7 Mod 3 型）
+
+CVN-69 装甲防护套件:
+双层舰壳
+X 形吸能支撑结构
+HY-80 高强度钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+先进灭火系统
+[/SHIP]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+【CVN-70 卡尔文森号】
+[SHIP]
+
+Ship_Instance: CVN-70 卡尔文森号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 未知
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷
+Mast: 未知
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.8 米
+Beam: 40.8 米
+Flight_Deck_Width: 77.1 米
+Draft: 11.3 米
+Standard_Displacement: 78434 吨
+Full_Load_Displacement: 91487 吨
+Speed: 30 节
+Range: 无限
+Crew: 5200 人
+Aircraft_Capacity: 90 架
+Power_Output: 260000 马力
+Propulsion: 4 轴 4 桨双主舵
+Flight_Deck_Area: 约 18000 平方米
+Island_Position: 右舷
+Homeport: 圣迭戈海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+[CATAPULT]
+弹射器（C-13-1）
+
+[ARRESTING_GEAR]
+拦阻索（Mk 7 Mod 3 型）
+拦阻网（Mk 7 Mod 3 型）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67
+AN/SPQ-9A
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)5, AN/SPS-43A
+对海搜索：AN/SPS-67
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9A, AN/SPQ-9B
+导航：SPS-64(V)9, URN-25
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+SLY-2
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4, SLY-2
+电子侦察：AN/WLR-1H
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-36
+电子干扰：未知
+
+[COMBAT_SYSTEM]
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS
+战术数据：NTDS
+舰艇自卫：SSDS Mk 2
+目标搜获：MK-23 TAS
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+SRR-1
+WSC-3
+WSC-6
+USC-38
+SSQ-82
+
+[COMMUNICATION_FUNCTION]
+卫星通信：SRR-1, WSC-3, WSC-6, USC-38, SSQ-82
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：未知
+联合战术系统：未知
+
+[DATA_LINK]
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+[WEAPON_SYSTEM]
+Mk 25
+Mk 29
+Mk 57 Mod 3
+RIM-7
+Mk 31
+RIM-116
+Mk 15
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 25, Mk 29, Mk 31, Mk 57 Mod 3
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F-35C
+F/A-18E/F
+F/A-18A/B/C/D
+F-14A/B/D（退役）
+E-2C
+E-2D
+EA-6B（退役）
+EA-18G
+A-6E（退役）
+S-3A/B（退役）
+ES-3A（退役）
+SH-3G/H（退役）
+SH-60F
+HH-60H
+MH-60R/S
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F-35C, F/A-18E/F, F/A-18A/B/C/D, F-14A/B/D（退役）, A-6E（退役）
+电子战飞机：EA-6B（退役）, EA-18G
+预警机：E-2C, E-2D
+反潜机：S-3A/B（退役）, SH-3G/H（退役）, SH-60F, MH-60R/S
+侦察机：ES-3A（退役）
+运输机：未知
+直升机：SH-60F, HH-60H, MH-60R/S
+
+[ARMOR_PROTECTION]
+双层舰壳
+X 形吸能支撑结构
+HY-80 高强度钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-70 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67
+AN/SPQ-9A
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+
+CVN-70 武器套件:
+Mk 25
+Mk 29
+Mk 57 Mod 3
+RIM-7
+Mk 31
+RIM-116
+Mk 15
+
+CVN-70 舰载火炮套件:
+未知
+
+CVN-70 电子战套件:
+AN/SLQ-32(V)4
+SLY-2
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+CVN-70 作战系统套件:
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+CVN-70 通信套件:
+SRR-1
+WSC-3
+WSC-6
+USC-38
+SSQ-82
+
+CVN-70 数据链套件:
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+CVN-70 舰载机联队:
+F-35C
+F/A-18E/F
+F/A-18A/B/C/D
+F-14A/B/D（退役）
+E-2C
+E-2D
+EA-6B（退役）
+EA-18G
+A-6E（退役）
+S-3A/B（退役）
+ES-3A（退役）
+SH-3G/H（退役）
+SH-60F
+HH-60H
+MH-60R/S
+
+CVN-70 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+CVN-70 弹射器套件:
+弹射器（C-13-1）
+
+CVN-70 拦阻装置套件:
+拦阻索（Mk 7 Mod 3 型）
+拦阻网（Mk 7 Mod 3 型）
+
+CVN-70 装甲防护套件:
+双层舰壳
+X 形吸能支撑结构
+HY-80 高强度钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+[/SHIP]
+
+
+
+
+
+
+
+
+
+
+【CVN-71 西奥多·罗斯福号】
+[SHIP]
+
+Ship_Instance: CVN-71 西奥多·罗斯福号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 未知
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷
+Mast: 未知
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.9 米
+Beam: 40.8 米
+Flight_Deck_Width: 76.8 米
+Draft: 11.8 米
+Standard_Displacement: 80777 吨
+Full_Load_Displacement: 104600 吨
+Speed: 30 节以上
+Range: 80～100 万海里
+Crew: 5860 人
+Aircraft_Capacity: 90 架
+Power_Output: 260000 马力
+Propulsion: 4 轴
+Flight_Deck_Area: 约 18000 平方米
+Island_Position: 右舷
+Homeport: 加利福尼亚圣迭戈北岛海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+
+[CATAPULT]
+弹射器（型号未知）
+
+[ARRESTING_GEAR]
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+MK23 TAS
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)5
+对海搜索：AN/SPS-67V
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9B, MK23 TAS
+导航：SPS-64(V)9, URN-25
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4
+电子侦察：未知
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-36
+电子干扰：未知
+
+[COMBAT_SYSTEM]
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS
+战术数据：NTDS
+舰艇自卫：SSDS Mk 2
+目标搜获：MK-23 TAS
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+未知
+
+[COMMUNICATION_FUNCTION]
+卫星通信：未知
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：未知
+联合战术系统：未知
+
+[DATA_LINK]
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+[WEAPON_SYSTEM]
+Mk 29
+RIM-7
+Mk 31
+RIM-116
+Mk 15
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 29, Mk 31
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F/A-18
+F-14D（退役）
+EA-6B
+E-2C
+A-6E（退役）
+S-3B
+ES-3A
+SH-3G（退役）
+SH-60F
+HH-60H
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18, F-14D（退役）, A-6E（退役）
+电子战飞机：EA-6B
+预警机：E-2C
+反潜机：S-3B, SH-3G（退役）, SH-60F
+侦察机：ES-3A
+运输机：未知
+直升机：SH-60F, HH-60H
+
+[ARMOR_PROTECTION]
+高强度合金钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+隐身吸波材料
+多层隔离防护结构
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-71 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+URN-25
+MK23 TAS
+
+CVN-71 武器套件:
+Mk 29
+RIM-7
+Mk 31
+RIM-116
+Mk 15
+
+CVN-71 舰载火炮套件:
+未知
+
+CVN-71 电子战套件:
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+CVN-71 作战系统套件:
+ACDS
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+CVN-71 通信套件:
+未知
+
+CVN-71 数据链套件:
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+CVN-71 舰载机联队:
+F/A-18
+F-14D（退役）
+EA-6B
+E-2C
+A-6E（退役）
+S-3B
+ES-3A
+SH-3G（退役）
+SH-60F
+HH-60H
+
+CVN-71 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+
+CVN-71 弹射器套件:
+弹射器（型号未知）
+
+CVN-71 拦阻装置套件:
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+CVN-71 装甲防护套件:
+高强度合金钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+隐身吸波材料
+多层隔离防护结构
+[/SHIP]
+
+
+
+
+
+
+
+
+
+
+【CVN-72 亚伯拉罕·林肯号】
+[SHIP]
+
+Ship_Instance: CVN-72 亚伯拉罕·林肯号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 未知
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷
+Mast: 未知
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 335.6 米
+Beam: 40.8 米
+Flight_Deck_Width: 76.8 米
+Draft: 11.9 米
+Standard_Displacement: 81600 吨
+Full_Load_Displacement: 102000 吨
+Speed: 30 节以上
+Range: 80～100 万海里
+Crew: 6072 人
+Aircraft_Capacity: 90 架
+Power_Output: 260000 马力
+Propulsion: 四桨四轴双舵
+Flight_Deck_Area: 约 18000 平方米
+Island_Position: 右舷
+Homeport: 加利福尼亚圣迭戈北岛海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四桨四轴双舵
+汽轮发电机
+应急柴油发电机
+
+[CATAPULT]
+弹射器（型号未知）
+
+[ARRESTING_GEAR]
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+AN/SPN-44
+Mk 91 NSSM
+Mk 95
+MK-73
+SPS-64(V)9
+URN-25
+MK23 TAS
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)5, AN/SPS-43A
+对海搜索：AN/SPS-67V
+火控：Mk 91 NSSM, Mk 95, MK-73
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9B, MK23 TAS
+导航：SPS-64(V)9, URN-25
+测速：AN/SPN-44
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-25A
+SLQ-29
+SLQ-36
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4, SLQ-29
+电子侦察：未知
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-25A, SLQ-36
+电子干扰：SLQ-29
+
+[COMBAT_SYSTEM]
+ACDS Block 0/1
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS Block 0/1
+战术数据：NTDS
+舰艇自卫：SSDS Mk 2
+目标搜获：MK-23 TAS
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+SSQ-1A
+WSC-3
+WSC-6
+USC-38
+
+[COMMUNICATION_FUNCTION]
+卫星通信：SSQ-1A, WSC-3, WSC-6, USC-38
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：未知
+联合战术系统：未知
+
+[DATA_LINK]
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+[WEAPON_SYSTEM]
+Mk 29
+Mk 57 Mod 3
+RIM-7
+RIM-7M
+Mk 31
+RIM-116
+Mk 15
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-7M, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 29, Mk 57 Mod 3, Mk 31
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F/A-18
+F-14（退役）
+EA-6B
+E-2
+A-6（退役）
+S-3A（退役）
+S-3B
+SH-3G（退役）
+SH-3H（退役）
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18, F-14（退役）, A-6（退役）
+电子战飞机：EA-6B
+预警机：E-2
+反潜机：S-3A（退役）, S-3B, SH-3G（退役）, SH-3H（退役）
+侦察机：未知
+运输机：未知
+直升机：SH-3G（退役）, SH-3H（退役）
+
+[ARMOR_PROTECTION]
+高强度合金钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+隐身吸波材料
+多层隔离防护结构
+箱型防御结构
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-72 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-43A
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+AN/SPN-44
+Mk 91 NSSM
+Mk 95
+MK-73
+SPS-64(V)9
+URN-25
+MK23 TAS
+
+CVN-72 武器套件:
+Mk 29
+Mk 57 Mod 3
+RIM-7
+RIM-7M
+Mk 31
+RIM-116
+Mk 15
+
+CVN-72 舰载火炮套件:
+未知
+
+CVN-72 电子战套件:
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-25A
+SLQ-29
+SLQ-36
+
+CVN-72 作战系统套件:
+ACDS Block 0/1
+NTDS
+SSDS Mk 2
+MK-23 TAS
+
+CVN-72 通信套件:
+SSQ-1A
+WSC-3
+WSC-6
+USC-38
+
+CVN-72 数据链套件:
+LINK-4A
+LINK-11
+LINK-14
+LINK-16
+
+CVN-72 舰载机联队:
+F/A-18
+F-14（退役）
+EA-6B
+E-2
+A-6（退役）
+S-3A（退役）
+S-3B
+SH-3G（退役）
+SH-3H（退役）
+
+CVN-72 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四桨四轴双舵
+汽轮发电机
+应急柴油发电机
+
+CVN-72 弹射器套件:
+弹射器（型号未知）
+
+CVN-72 拦阻装置套件:
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+CVN-72 装甲防护套件:
+高强度合金钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+隐身吸波材料
+多层隔离防护结构
+箱型防御结构
+[/SHIP]
+
+
+
+
+
+
+
+
+
+
+
+【CVN-73 乔治·华盛顿号】
+[SHIP]
+
+Ship_Instance: CVN-73 乔治·华盛顿号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 未知
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷中部
+Mast: 未知
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.8 米
+Beam: 40.8 米
+Flight_Deck_Width: 76.8 米
+Draft: 11.3 米
+Standard_Displacement: 98500 吨
+Full_Load_Displacement: 100400 吨
+Speed: 30 节以上
+Range: 无限
+Crew: 5680 人
+Aircraft_Capacity: 80 架
+Power_Output: 260000 马力
+Propulsion: 4 轴 4 桨
+Flight_Deck_Area: 约 18000 平方米
+Island_Position: 右舷中部
+Homeport: 日本神奈川县横须贺海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+
+[CATAPULT]
+弹射器（型号未知）
+
+[ARRESTING_GEAR]
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+MK23 TAS
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)5, MK23 TAS
+对海搜索：AN/SPS-67V
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9B
+导航：SPS-64(V)9
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+AN/SLQ-25
+SLQ-25A
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4
+电子侦察：未知
+诱饵发射：未知
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-25A
+电子干扰：未知
+
+[COMBAT_SYSTEM]
+ACDS Block 0/1
+MK-23 TAS
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS Block 0/1
+战术数据：未知
+舰艇自卫：未知
+目标搜获：MK-23 TAS
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+未知
+
+[COMMUNICATION_FUNCTION]
+卫星通信：未知
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：未知
+联合战术系统：未知
+
+[DATA_LINK]
+未知
+
+[WEAPON_SYSTEM]
+Mk 57 Mod 3
+RIM-7
+RIM-7M
+Mk 31
+RIM-116
+Mk 15
+三联装324毫米鱼雷发射管
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-7M, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 57 Mod 3, Mk 31
+鱼雷发射装置：三联装324毫米鱼雷发射管
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F/A-18
+F-14（退役）
+EA-6B
+E-2C
+S-3B（只执行水面侦查任务）
+ES-3A（退役）
+SH-60
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18, F-14（退役）
+电子战飞机：EA-6B
+预警机：E-2C
+反潜机：S-3B, SH-60
+侦察机：ES-3A（退役）
+运输机：未知
+直升机：SH-60
+
+[ARMOR_PROTECTION]
+高强度合金钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-73 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+MK23 TAS
+
+CVN-73 武器套件:
+Mk 57 Mod 3
+RIM-7
+RIM-7M
+Mk 31
+RIM-116
+Mk 15
+三联装324毫米鱼雷发射管
+
+CVN-73 舰载火炮套件:
+未知
+
+CVN-73 电子战套件:
+AN/SLQ-32(V)4
+AN/SLQ-25
+SLQ-25A
+
+CVN-73 作战系统套件:
+ACDS Block 0/1
+MK-23 TAS
+
+CVN-73 通信套件:
+未知
+
+CVN-73 数据链套件:
+未知
+
+CVN-73 舰载机联队:
+F/A-18
+F-14（退役）
+EA-6B
+E-2C
+S-3B（只执行水面侦查任务）
+ES-3A（退役）
+SH-60
+
+CVN-73 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+
+CVN-73 弹射器套件:
+弹射器（型号未知）
+
+CVN-73 拦阻装置套件:
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+CVN-73 装甲防护套件:
+高强度合金钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+[/SHIP]
+
+
+
+
+
+
+
+
+
+【CVN-74 约翰·C·斯坦尼斯号】
+[SHIP]
+
+Ship_Instance: CVN-74 约翰·C·斯坦尼斯号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 未知
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷中部
+Mast: 未知
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.85 米
+Beam: 40.8 米
+Flight_Deck_Width: 78.34 米
+Draft: 11.7 米
+Standard_Displacement: 91300 吨
+Full_Load_Displacement: 102000 吨
+Speed: 30 节
+Range: 无限
+Crew: 5680 人
+Aircraft_Capacity: 90 架
+Power_Output: 280000 马力
+Propulsion: 4 轴 5 桨
+Flight_Deck_Area: 18211 平方米
+Island_Position: 右舷中部
+Homeport: 华盛顿州布雷默顿海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴五桨
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+[CATAPULT]
+弹射器（C-13-1）
+
+[ARRESTING_GEAR]
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)1
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+MK91-1
+Mk 95
+LN-66
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)1, AN/SPS-49(V)5
+对海搜索：AN/SPS-67V
+火控：MK91-1, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9B
+导航：LN-66
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4
+电子侦察：未知
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-36
+电子干扰：未知
+
+[COMBAT_SYSTEM]
+ACDS Block 1
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS Block 1
+战术数据：未知
+舰艇自卫：未知
+目标搜获：未知
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+IT21
+
+[COMMUNICATION_FUNCTION]
+卫星通信：未知
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：IT21"21世纪信息技术"系统
+联合战术系统：未知
+
+[DATA_LINK]
+未知
+
+[WEAPON_SYSTEM]
+Mk 57 Mod 3
+RIM-7
+Mk 31
+RIM-116
+Mk 15
+三联装324毫米鱼雷发射管
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 57 Mod 3, Mk 31
+鱼雷发射装置：三联装324毫米鱼雷发射管
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F/A-18
+EA-6B
+E-2C
+S-3B
+SH-60
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18
+电子战飞机：EA-6B
+预警机：E-2C
+反潜机：S-3B, SH-60
+侦察机：未知
+运输机：未知
+直升机：SH-60
+
+[ARMOR_PROTECTION]
+高弹性钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+泡沫消防装置
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+CVN-74 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)1
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+MK91-1
+Mk 95
+LN-66
+
+CVN-74 武器套件:
+Mk 57 Mod 3
+RIM-7
+Mk 31
+RIM-116
+Mk 15
+三联装324毫米鱼雷发射管
+
+CVN-74 舰载火炮套件:
+未知
+
+CVN-74 电子战套件:
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+CVN-74 作战系统套件:
+ACDS Block 1
+
+CVN-74 通信套件:
+IT21
+
+CVN-74 数据链套件:
+未知
+
+CVN-74 舰载机联队:
+F/A-18
+EA-6B
+E-2C
+S-3B
+SH-60
+
+CVN-74 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴五桨
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+CVN-74 弹射器套件:
+弹射器（C-13-2）
+
+CVN-74 拦阻装置套件:
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+CVN-74 装甲防护套件:
+高弹性钢
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+泡沫消防装置
+[/SHIP]
+
+
+
+
+
+
+
+
+
+[SHIP]
+
+Ship_Instance: CVN-75 哈里·S·杜鲁门号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 未知
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷中部
+Mast: 未知
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.8 米
+Beam: 40.8 米
+Flight_Deck_Width: 76.8 米
+Draft: 11.8 米
+Standard_Displacement: 91487 吨
+Full_Load_Displacement: 97000 吨
+Speed: 30 节
+Range: 80～100 万海里
+Crew: 5852 人
+Aircraft_Capacity: 90 架
+Power_Output: 260000 马力
+Propulsion: 4 轴 4 桨
+Flight_Deck_Area: 约 18000 平方米
+Island_Position: 右舷中部
+Homeport: 弗吉尼亚州诺福克海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴四桨
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+[CATAPULT]
+弹射器（型号未知）
+
+[ARRESTING_GEAR]
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)5
+对海搜索：AN/SPS-67V
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9B
+导航：SPS-64(V)9
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4
+电子侦察：未知
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-36
+电子干扰：未知
+
+[COMBAT_SYSTEM]
+ACDS Block 0/1
+MK23 TAS
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS Block 0/1
+战术数据：未知
+目标搜获：MK23 TAS
+舰艇自卫：未知
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+IT‑21 非保密型局域网系统
+
+[COMMUNICATION_FUNCTION]
+卫星通信：未知
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：IT‑21 非保密型局域网系统
+联合战术系统：未知
+
+[DATA_LINK]
+未知
+
+[WEAPON_SYSTEM]
+Mk 29
+Mk 57 Mod 3
+RIM-7
+RIM-7M
+RIM-116
+Mk 15
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-7M, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 29, Mk 57 Mod 3
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F-14（退役）
+F/A-18
+EA-6B
+E-2C
+S-3B
+ES-3A（退役）
+SH-60F
+C-2A
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18, F-14（退役）
+电子战飞机：EA-6B
+预警机：E-2C
+反潜机：S-3B, SH-60F
+侦察机：ES-3A（退役）
+运输机：C-2A
+直升机：SH-60F
+
+[ARMOR_PROTECTION]
+高强度合金钢
+多层隔离防护结构
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+隐身吸波材料
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-75 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPS-67V
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+SPS-64(V)9
+
+CVN-75 武器套件:
+Mk 29
+Mk 57 Mod 3
+RIM-7
+RIM-7M
+RIM-116
+Mk 15
+
+CVN-75 舰载火炮套件:
+未知
+
+CVN-75 电子战套件:
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+CVN-75 作战系统套件:
+ACDS Block 0/1
+MK23 TAS
+
+CVN-75 通信套件:
+IT‑21 非保密型局域网系统
+
+CVN-75 数据链套件:
+未知
+
+CVN-75 舰载机联队:
+F-14（退役）
+F/A-18
+EA-6B
+E-2C
+S-3B
+ES-3A（退役）
+SH-60F
+C-2A
+
+CVN-75 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴四桨
+汽轮发电机
+应急柴油发电机
+备用柴油机
+
+CVN-75 弹射器套件:
+弹射器（型号未知）
+
+CVN-75 拦阻装置套件:
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+CVN-75 装甲防护套件:
+高强度合金钢
+多层隔离防护结构
+水密隔舱壁
+防火隔壁
+水密隔舱
+纵向防雷舱壁
+凯夫拉装甲
+隐身吸波材料
+[/SHIP]
+
+
+
+
+
+
+
+
+
+【CVN-76 罗纳德·里根号】
+[SHIP]
+
+Ship_Instance: CVN-76 罗纳德·里根号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 球鼻艏
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷中部
+Mast: 塔状桅杆，与舰岛整合
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.85 米
+Beam: 40.8 米
+Flight_Deck_Width: 78.34 米
+Draft: 11.9 米
+Standard_Displacement: 97000 吨
+Full_Load_Displacement: 104000 吨
+Speed: 30 节
+Range: 无限
+Crew: 5680 人
+Aircraft_Capacity: 80 架
+Power_Output: 280000 马力
+Propulsion: 4 轴 4 桨
+Flight_Deck_Area: 18211 平方米
+Island_Position: 右舷中部
+Homeport: 加利福尼亚州圣地亚哥军港
+
+[POWERPLANT]
+A4W/A1G 压水核反应堆
+蒸汽涡轮发动机
+四轴四桨
+汽轮发电机
+应急柴油发电机
+
+[CATAPULT]
+弹射器（型号未知）
+
+[ARRESTING_GEAR]
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)1
+AN/SPS-49(V)5
+AN/SPS-67V-1
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+URN-25
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)1, AN/SPS-49(V)5
+对海搜索：AN/SPS-67V-1
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9B
+导航：URN-25
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4
+电子侦察：未知
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-36
+电子干扰：未知
+
+[COMBAT_SYSTEM]
+ACDS Block 1
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS Block 1
+战术数据：未知
+舰艇自卫：未知
+目标搜获：未知
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+全光纤数字化通信系统
+
+[COMMUNICATION_FUNCTION]
+卫星通信：未知
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：未知
+联合战术系统：未知
+
+[DATA_LINK]
+未知
+
+[WEAPON_SYSTEM]
+Mk 29
+RIM-7
+RIM-116
+Mk 15
+三联装324毫米鱼雷发射管
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 29
+鱼雷发射装置：三联装324毫米鱼雷发射管
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F/A-18A/C/E
+F/A-18F
+EA-6B
+E-2C
+SH-60
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18A/C/E, F/A-18F
+电子战飞机：EA-6B
+预警机：E-2C
+反潜机：SH-60
+侦察机：未知
+运输机：未知
+直升机：SH-60
+
+[ARMOR_PROTECTION]
+高强度合金钢
+双层船体
+X形构件
+多层隔舱防护
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-76 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)1
+AN/SPS-49(V)5
+AN/SPS-67V-1
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+URN-25
+
+CVN-76 武器套件:
+Mk 29
+RIM-7
+RIM-116
+Mk 15
+三联装324毫米鱼雷发射管
+
+CVN-76 舰载火炮套件:
+未知
+
+CVN-76 电子战套件:
+AN/SLQ-32(V)4
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-36
+
+CVN-76 作战系统套件:
+ACDS Block 1
+
+CVN-76 通信套件:
+全光纤数字化通信系统
+
+CVN-76 数据链套件:
+未知
+
+CVN-76 舰载机联队:
+F/A-18A/C/E
+F/A-18F
+EA-6B
+E-2C
+SH-60
+
+CVN-76 动力套件:
+A4W/A1G 压水核反应堆
+蒸汽涡轮发动机
+四轴四桨
+汽轮发电机
+应急柴油发电机
+
+CVN-76 弹射器套件:
+弹射器（型号未知）
+
+CVN-76 拦阻装置套件:
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+CVN-76 装甲防护套件:
+高强度合金钢
+双层船体
+X形构件
+多层隔舱防护
+[/SHIP]
+
+
+
+
+
+
+
+
+
+【CVN-77 乔治·H·W·布什号】
+[SHIP]
+
+Ship_Instance: CVN-77 乔治·H·W·布什号
+Ship_Class: 尼米兹级
+
+[VISUAL_FEATURES]
+
+Bow: 球鼻艏
+Stern: 未知
+Deck: 斜角甲板，直角甲板
+Island: 舰岛位于右舷中部
+Mast: 复合桅杆（与舰桥融为一体的封闭式桅杆）
+
+[TEXT_ATTRIBUTES]
+
+Length_Overall: 332.8 米
+Beam: 40.8 米
+Flight_Deck_Width: 76.8 米
+Draft: 11.3 米
+Standard_Displacement: 101000 吨
+Full_Load_Displacement: 104000 吨
+Speed: 30 节
+Range: 无限
+Crew: 5680 人
+Aircraft_Capacity: 90 架
+Power_Output: 260000 马力
+Propulsion: 4 轴双主舵
+Flight_Deck_Area: 18211 平方米
+Island_Position: 右舷中部
+Homeport: 弗吉尼亚州诺福克海军基地
+
+[POWERPLANT]
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+
+[CATAPULT]
+弹射器（型号未知）
+
+[ARRESTING_GEAR]
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+[RADAR_SYSTEM]
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+
+[RADAR_FUNCTION]
+对空搜索：AN/SPS-48E, AN/SPS-49(V)5
+对海搜索：未知
+火控：Mk 91 NSSM, Mk 95
+空中管制：AN/SPN-41, AN/SPN-46, AN/SPN-43C
+目标截获：AN/SPQ-9B
+导航：未知
+
+[COUNTERMEASURE_SYSTEM]
+AN/SLQ-32(V)4
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-25A
+
+[COUNTERMEASURE_FUNCTION]
+电子战：AN/SLQ-32(V)4, AN/WLR-1H
+电子侦察：未知
+诱饵发射：Mk 36 SRBOC
+拖曳鱼雷诱饵：AN/SLQ-25, SLQ-25A
+电子干扰：未知
+
+[COMBAT_SYSTEM]
+ACDS
+MK23 TAS
+SSDS Mk 2
+
+[COMBAT_FUNCTION]
+战斗指挥：ACDS
+战术数据：未知
+舰艇自卫：SSDS Mk 2
+目标搜获：MK23 TAS
+信息指挥：未知
+
+[COMMUNICATION_SYSTEM]
+未知
+
+[COMMUNICATION_FUNCTION]
+卫星通信：未知
+战术环境支援：未知
+航母情报：未知
+指挥信息系统：未知
+联合战术系统：未知
+
+[DATA_LINK]
+未知
+
+[WEAPON_SYSTEM]
+Mk 29
+Mk 31
+RIM-7
+RIM-116
+Mk 15
+LOCUST
+
+[WEAPON_FUNCTION]
+短程防空：RIM-7, RIM-116
+近防系统：Mk 15
+导弹发射装置：Mk 29, Mk 31
+激光武器：LOCUST
+
+[SHIPBOARD_GUN]
+未知
+
+[SHIPBOARD_GUN_FUNCTION]
+遥控机炮：未知
+重机枪：未知
+
+[AIRCRAFT]
+F/A-18
+EA-6B
+EA-18G
+E-2C
+S-3A（退役）
+SH-60
+SH-60F
+UH-60
+
+[AIRCRAFT_FUNCTION]
+战斗攻击机：F/A-18
+电子战飞机：EA-6B, EA-18G
+预警机：E-2C
+反潜机：S-3A（退役）, SH-60, SH-60F
+侦察机：未知
+运输机：未知
+直升机：SH-60, SH-60F, UH-60
+
+[ARMOR_PROTECTION]
+高强度合金钢
+双层船体
+多层隔舱防护
+
+[SHIPYARD]
+纽波特纽斯造船厂
+
+[SERVICE_STATUS]
+现役
+
+[CONFIGURATION]
+# 装备套件型配置（按类型聚合）
+CVN-77 雷达套件:
+AN/SPS-48E
+AN/SPS-49(V)5
+AN/SPQ-9B
+AN/SPN-46
+AN/SPN-43C
+AN/SPN-41
+Mk 91 NSSM
+Mk 95
+
+CVN-77 武器套件:
+Mk 29
+Mk 31
+RIM-7
+RIM-116
+Mk 15
+LOCUST
+
+CVN-77 舰载火炮套件:
+未知
+
+CVN-77 电子战套件:
+AN/SLQ-32(V)4
+AN/WLR-1H
+Mk 36 SRBOC
+AN/SLQ-25
+SLQ-25A
+
+CVN-77 作战系统套件:
+ACDS
+MK23 TAS
+SSDS Mk 2
+
+CVN-77 通信套件:
+未知
+
+CVN-77 数据链套件:
+未知
+
+CVN-77 舰载机联队:
+F/A-18
+EA-6B
+EA-18G
+E-2C
+S-3A（退役）
+SH-60
+SH-60F
+UH-60
+
+CVN-77 动力套件:
+A4W 压水核反应堆
+蒸汽涡轮发动机
+四轴双主舵
+汽轮发电机
+应急柴油发电机
+
+CVN-77 弹射器套件:
+弹射器（型号未知）
+
+CVN-77 拦阻装置套件:
+拦阻索（型号未知）
+拦阻网（型号未知）
+
+CVN-77 装甲防护套件:
+高强度合金钢
+双层船体
+多层隔舱防护
+[/SHIP]
+
+
+
+
+
