@@ -81,6 +81,7 @@ async def siliconflow_llm_complete(
     response = await client.chat.completions.create(
         model=MODEL,
         messages=messages,
+        temperature=0.1,  # 👈 只加这一行！
         **kwargs
     )
     result = response.choices[0].message.content

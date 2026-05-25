@@ -217,7 +217,14 @@ MH-60R, MH-60R/S, SH-60, UH-60, C-2, C-2A
 
 
 ### Configuration
-使用 "舰名+装备类型+套件" 命名，如 "CVN-68 雷达套件"
+- 配置实体名必须严格等于 [CONFIGURATION] 部分中每一行冒号前的完整文本，不得修改或自行拼凑。
+- 命名规则为 "舰名+装备类型+套件"，如 "CVN-68 雷达套件"。
+- 如果 [CONFIGURATION] 中某行为 "CVN-68 雷达套件:"，则实体名就是 "CVN-68 雷达套件"，不要省略或添加内容。
+- 关键：必须为 [CONFIGURATION] 中列表内的所有项创建关系，不得遗漏或只取第一条。例如，当套件包含多个实体时，你必须为列表中的每一个实体都创建一条对应的关系。
+- 禁止根据其他章节（如 [RADAR_SYSTEM]）自行推断配置名。
+- 【最高优先级禁令】绝对禁止编造、自创任何 [CONFIGURATION] 中不存在的配置实体；原文没有的配置名称，一律不生成。
+- 【提取规则】仅逐行提取 [CONFIGURATION] 区块内真实存在的行，无中生有的配置名（如战斗套件、对抗套件）严禁输出。
+- 【数量约束】每一艘舰船的 [CONFIGURATION] 有多少行，就生成多少个 Configuration 实体，不多生成、不少生成。
 
 ## 已知关系类型 (必须严格使用)
 ### 身份归属
@@ -302,6 +309,7 @@ HAS_HOMEPORT: (Ship_Instance) -> (母港)
 - Each line like "CVN-68 雷达套件:" is a Configuration entity
 - entity_name is the line before the colon
 - The items listed below are NOT entities, they define relationships
+- NO additional Configuration entities allowed: only extract lines that exist in the input text.
 
 **Auxiliary sections**:
 - Shipyard: entity_name MUST be "建造船厂", entity_description is the value
