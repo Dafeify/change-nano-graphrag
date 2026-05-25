@@ -56,7 +56,7 @@ from nano_graphrag._utils import compute_args_hash
 # --- 模型配置 ---
 MODEL = "deepseek-ai/DeepSeek-V3"
 BASE_URL = "https://api.siliconflow.cn/v1"
-API_KEY = "sk-vhbjyldwwhiawpnmitereqdvwpplxfqezsyihnnmxwqovkgy"  # 临时硬编码，测试完记得改回环境变量
+API_KEY = ""  # 临时硬编码，测试完记得改回环境变量
 
 # --- 自定义大模型调用函数 ---
 async def siliconflow_llm_complete(
