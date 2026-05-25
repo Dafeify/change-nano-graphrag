@@ -62,21 +62,31 @@ Output: """
 
 PROMPTS[
     "community_report"
-] = """你是一个信息助手。请根据提供的实体和关系，用中文写一段极短的社区摘要。
+] = """你是一个军舰知识分析专家。请根据提供的实体和关系，生成一个型号属性映射表。
 
-必须输出以下JSON格式，且只输出JSON：
-{
-  "title": "社区摘要",
-  "summary": "概览",
-  "rating": 5.0,
-  "rating_explanation": "正常",
-  "findings": [
-    {"summary": "要点1", "explanation": "解释1"},
-    {"summary": "要点2", "explanation": "解释2"}
+映射表应以**特征组合**为索引，每个组合下列出满足该组合的候选舷号（Ship_Instance）。
+
+示例格式：
+{{
+  "特征组合": [
+    {{
+      "条件": {{"雷达": "AN/SPY-6", "近防系统": "Phalanx Block 1B", "舰岛层数": "3"}},
+      "候选舷号": ["CVN-72", "CVN-73"]
+    }},
+    {{
+      "条件": {{"雷达": "AN/SPY-6", "近防系统": "SeaRAM", "舰岛层数": "4"}},
+      "候选舷号": ["CVN-76", "CVN-77"]
+    }}
   ]
-}
+}}
 
-文本：
+关键要求：
+1. 特征组合中的条件应使用实体类型的中文简称：雷达(Radar_System)、对抗系统(Countermeasure_System)、指挥作战(Combat_System)、武器装备(Weapon_System)、舰载火炮(Shipboard_Gun)、动力装置(Powerplant)、舰载飞机(Aircraft)、舰首(Bow)、舰尾(Stern)、舰岛(Island)、甲板(Deck)、桅杆(Mast)。
+2. 每个特征组合的候选舷号必须是从社区实体中真实存在的 Ship_Instance。
+3. 只输出 JSON，不要包含其他解释文字。
+
+使用以下文本生成映射表：
+Text:
 ```
 {input_text}
 ```
@@ -84,91 +94,23 @@ PROMPTS[
 Output:
 """
 
+
 PROMPTS["entity_extraction"] = """-Goal-
 Given a text document, identify all entities of the specified types and all relationships among them.
 
 -Steps-
-**最优先规则（必须严格遵守）**：
-
-1. 对于纯文本属性类实体（Length_Overall, Beam, Draft, Standard_Displacement, Full_Load_Displacement, Speed, Range, Crew, Aircraft_Capacity, Power_Output, Propulsion, Flight_Deck_Area, Island_Position, Homeport），entity_name 必须是属性描述（如"舰总长"），绝对不能是具体数值（如"332.8米"）。具体数值必须写入 entity_description。
-
-2. 对于 Mast 类实体，entity_name 必须从词典中的通用实体名（柱状综合桅杆、塔状桅杆、复合桅杆）中选择，外形修饰描述（如"细长高大"）必须写入 entity_description，不得作为 entity_name 的一部分。
-
-3. 所有 entity_name 必须严格来自已知实体词典，不得自创。如果文本中出现的名称不在词典中，必须选择词典中最接近的实体名。
-
-
-4. 识别所有实体。对于每个识别的实体，提取以下信息：
+1. 识别所有实体。对于每个识别的实体，提取以下信息：
 - entity_name: 必须严格遵循已知实体词典中的规定
 - entity_type: 必须是以下类型之一：[{entity_types}]
 - entity_description: 根据填写规则写入描述信息
 
-5. 装备聚合规则（Configuration 的使用）：
+2. 装备聚合规则（Configuration 的使用）：
    - 每艘舰的每一类装备都必须创建一个 Configuration 套件节点
    - 命名格式为"舰名+装备类型+套件"，例如"CVN-73 雷达套件"、"CVN-68 武器套件"
    - 用 EQUIPPED_WITH 关系将舰连接到 Configuration，再用专用关系将 Configuration 连接到每个具体装备实体
    - 专用关系包括：HAS_RADAR, HAS_COUNTERMEASURE, HAS_COMBAT, HAS_COMMUNICATION,
      HAS_DATA_LINK, HAS_WEAPON, HAS_GUN, HAS_AIRCRAFT, HAS_POWERPLANT,
      HAS_CATAPULT_EQUIP, HAS_ARRESTING_EQUIP, HAS_ARMOR
-     
-**关系类型（必须从以下列表中选择，不得自创）**：
-
-### 身份归属
-BELONGS_TO_CLASS: (Ship_Instance) → (Ship_Class)
-
-### 视觉特征
-HAS_BOW: (Ship_Instance) → (Bow)
-HAS_STERN: (Ship_Instance) → (Stern)
-HAS_ISLAND: (Ship_Instance) → (Island)
-HAS_DECK: (Ship_Instance) → (Deck)
-HAS_MAST: (Ship_Instance) → (Mast)
-
-### 装备套件连接
-EQUIPPED_WITH: (Ship_Instance) → (Configuration)
-HAS_RADAR: (Configuration) → (Radar_System)
-HAS_COUNTERMEASURE: (Configuration) → (Countermeasure_System)
-HAS_COMBAT: (Configuration) → (Combat_System)
-HAS_COMMUNICATION: (Configuration) → (Communication_System)
-HAS_DATA_LINK: (Configuration) → (Data_Link)
-HAS_WEAPON: (Configuration) → (Weapon_System)
-HAS_GUN: (Configuration) → (Shipboard_Gun)
-HAS_AIRCRAFT: (Configuration) → (Aircraft)
-HAS_POWERPLANT: (Configuration) → (Powerplant)
-HAS_CATAPULT_EQUIP: (Configuration) → (Catapult)
-HAS_ARRESTING_EQUIP: (Configuration) → (Arresting_Gear)
-HAS_ARMOR: (Configuration) → (Armor_Protection)
-
-### 功能分类连接
-HAS_RADAR_FUNCTION: (Radar_System) → (Radar_Function)
-HAS_COUNTERMEASURE_FUNCTION: (Countermeasure_System) → (Countermeasure_Function)
-HAS_COMBAT_FUNCTION: (Combat_System) → (Combat_Function)
-HAS_COMMUNICATION_FUNCTION: (Communication_System) → (Communication_Function)
-HAS_WEAPON_FUNCTION: (Weapon_System) → (Weapon_Function)
-HAS_AIRCRAFT_FUNCTION: (Aircraft) → (Aircraft_Function)
-HAS_SHIPBOARD_GUN_FUNCTION: (Shipboard_Gun) → (Shipboard_Gun_Function)
-
-### 辅助功能与结构连接
-HAS_ARMOR_PROTECTION: (Ship_Instance) → (Armor_Protection)
-BUILT_BY: (Ship_Instance) → (Shipyard)
-HAS_SERVICE_STATUS: (Ship_Instance) → (Service_Status)
-
-### 纯文本属性连接
-HAS_LENGTH_OVERALL: (Ship_Instance) → (Length_Overall)
-HAS_BEAM: (Ship_Instance) → (Beam)
-HAS_FLIGHT_DECK_WIDTH: (Ship_Instance) → (Flight_Deck_Width)
-HAS_DRAFT: (Ship_Instance) → (Draft)
-HAS_STANDARD_DISPLACEMENT: (Ship_Instance) → (Standard_Displacement)
-HAS_FULL_LOAD_DISPLACEMENT: (Ship_Instance) → (Full_Load_Displacement)
-HAS_SPEED: (Ship_Instance) → (Speed)
-HAS_RANGE: (Ship_Instance) → (Range)
-HAS_CREW: (Ship_Instance) → (Crew)
-HAS_AIRCRAFT_CAPACITY: (Ship_Instance) → (Aircraft_Capacity)
-HAS_POWER_OUTPUT: (Ship_Instance) → (Power_Output)
-HAS_PROPULSION: (Ship_Instance) → (Propulsion)
-HAS_FLIGHT_DECK_AREA: (Ship_Instance) → (Flight_Deck_Area)
-HAS_ISLAND_POSITION: (Ship_Instance) → (Island_Position)
-HAS_HOMEPORT: (Ship_Instance) → (Homeport)
-
-
 
 ## 已知实体词典（所有实体名必须来自以下列表，不得自创）
 
@@ -387,7 +329,7 @@ PROMPTS[
     {{
       "hull_number": "CVN-72",
       "confidence": 0.85,
-      "match_points": ["满载排水量104200吨", "球鼻首", "三层舰岛"],
+      "match_points": ["满载排水量104200吨", "球鼻艏", "三层舰岛"],
       "differences": ["雷达型号不匹配(观察为未知)"],
       "key_attributes": {{
         "full_load_displacement": "104200吨",
