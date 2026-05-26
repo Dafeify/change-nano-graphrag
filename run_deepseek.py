@@ -262,9 +262,6 @@ async def direct_text_parse(user_text: str) -> str:
 
 
 
-
-
-
 # ==================== 图谱匹配（含置信度分层） ====================
 async def match_candidates(graph_func, observed_attrs_json: str) -> str:
     """
