@@ -226,29 +226,31 @@ MH-60R, MH-60R/S, SH-60, UH-60, C-2, C-2A
 - 【提取规则】仅逐行提取 [CONFIGURATION] 区块内真实存在的行，无中生有的配置名（如战斗套件、对抗套件）严禁输出。
 - 【数量约束】每一艘舰船的 [CONFIGURATION] 有多少行，就生成多少个 Configuration 实体，不多生成、不少生成。
 
-## 已知关系类型 (必须严格模仿以下示例的方向)
+## 已知关系类型 (必须严格模仿以下示例的方向，禁止任何反转)
+⚠️ 【方向区分铁律】所有带 `_OF` 后缀的关系：属性 → 实体；所有带 `HAS_*_FUNCTION` 前缀的关系：设备 → 功能
+
 ### 身份归属
-BELONGS_TO_CLASS 示例: CVN-68 尼米兹号 → 尼米兹级
+INSTANCE_OF 示例: 尼米兹级 → CVN-68 尼米兹号
 ### 视觉特征
-HAS_BOW 示例: CVN-68 尼米兹号 → 船首
-HAS_STERN 示例: CVN-68 尼米兹号 → 船尾
-HAS_DECK 示例: CVN-68 尼米兹号 → 甲板
-HAS_ISLAND 示例: CVN-68 尼米兹号 → 舰岛
-HAS_MAST 示例: CVN-68 尼米兹号 → 桅杆
+BOW_OF 示例: 船首 → CVN-68 尼米兹号
+STERN_OF 示例: 船尾 → CVN-68 尼米兹号
+DECK_OF 示例: 甲板 → CVN-68 尼米兹号
+ISLAND_OF 示例: 舰岛 → CVN-68 尼米兹号
+MAST_OF 示例: 桅杆 → CVN-68 尼米兹号
 ### 装备套件连接
 EQUIPPED_WITH 示例: CVN-68 尼米兹号 → CVN-68 雷达套件
-HAS_RADAR 示例: CVN-68 雷达套件 → AN/SPS-48C/E
-HAS_COUNTERMEASURE 示例: CVN-68 电子战套件 → AN/SLQ-32(V)4
-HAS_COMBAT 示例: CVN-68 作战系统套件 → ACDS
-HAS_COMMUNICATION 示例: CVN-68 通信套件 → SRR-1
-HAS_DATA_LINK 示例: CVN-68 数据链套件 → LINK-4A
-HAS_WEAPON 示例: CVN-68 武器套件 → Mk 29
-HAS_GUN 示例: CVN-68 舰载火炮套件 → Mk 38
-HAS_AIRCRAFT 示例: CVN-68 舰载机联队 → F/A-18E/F
-HAS_POWERPLANT 示例: CVN-68 动力套件 → A4W 压水核反应堆
-HAS_CATAPULT_EQUIP 示例: CVN-68 弹射器套件 → 弹射器
-HAS_ARRESTING_EQUIP 示例: CVN-68 拦阻装置套件 → 拦阻索
-HAS_ARMOR 示例: CVN-68 装甲防护套件 → 双层舰壳
+RADAR_OF 示例: AN/SPS-48C/E → CVN-68 雷达套件
+WEAPON_OF 示例: Mk 29 → CVN-68 武器套件
+COUNTERMEASURE_OF 示例: AN/SLQ-32(V)4 → CVN-68 电子战套件
+COMBAT_SYSTEM_OF 示例: ACDS → CVN-68 作战系统套件
+COMMUNICATION_OF 示例: SRR-1 → CVN-68 通信套件
+DATA_LINK_OF 示例: LINK-4A → CVN-68 数据链套件
+GUN_OF 示例: Mk 38 → CVN-68 舰载火炮套件
+AIRCRAFT_OF 示例: F/A-18E/F → CVN-68 舰载机联队
+POWERPLANT_OF 示例: A4W 压水核反应堆 → CVN-68 动力套件
+CATAPULT_OF 示例: 弹射器 → CVN-68 弹射器套件
+ARRESTING_GEAR_OF 示例: 拦阻索 → CVN-68 拦阻装置套件
+ARMOR_OF 示例: 双层舰壳 → CVN-68 装甲防护套件
 ### 功能分类连接
 HAS_RADAR_FUNCTION 示例: AN/SPS-48C/E → 对空搜索
 HAS_COUNTERMEASURE_FUNCTION 示例: AN/SLQ-32(V)4 → 电子战
@@ -258,25 +260,25 @@ HAS_WEAPON_FUNCTION 示例: Mk 29 → 导弹发射装置
 HAS_AIRCRAFT_FUNCTION 示例: F/A-18E/F → 战斗攻击机
 HAS_SHIPBOARD_GUN_FUNCTION 示例: Mk 38 → 遥控机炮
 ### 辅助功能与结构连接
-HAS_ARMOR_PROTECTION 示例: CVN-68 尼米兹号 → 双层舰壳
-BUILT_BY 示例: CVN-68 尼米兹号 → 建造船厂
-HAS_SERVICE_STATUS 示例: CVN-68 尼米兹号 → 服役状态
+ARMOR_PROTECTION_OF 示例: 双层舰壳 → CVN-68 尼米兹号
+BUILT 示例: 建造船厂 → CVN-68 尼米兹号
+SERVICE_STATUS_OF 示例: 服役状态 → CVN-68 尼米兹号
 ### 纯文本属性连接
-HAS_LENGTH_OVERALL 示例: CVN-68 尼米兹号 → 舰总长
-HAS_BEAM 示例: CVN-68 尼米兹号 → 舷宽
-HAS_FLIGHT_DECK_WIDTH 示例: CVN-68 尼米兹号 → 飞行甲板宽
-HAS_DRAFT 示例: CVN-68 尼米兹号 → 吃水深度
-HAS_STANDARD_DISPLACEMENT 示例: CVN-68 尼米兹号 → 标准排水量
-HAS_FULL_LOAD_DISPLACEMENT 示例: CVN-68 尼米兹号 → 满载排水量
-HAS_SPEED 示例: CVN-68 尼米兹号 → 航速
-HAS_RANGE 示例: CVN-68 尼米兹号 → 续航力
-HAS_CREW 示例: CVN-68 尼米兹号 → 舰员编制
-HAS_AIRCRAFT_CAPACITY 示例: CVN-68 尼米兹号 → 舰载机数量
-HAS_POWER_OUTPUT 示例: CVN-68 尼米兹号 → 推进功率
-HAS_PROPULSION 示例: CVN-68 尼米兹号 → 推进装置
-HAS_FLIGHT_DECK_AREA 示例: CVN-68 尼米兹号 → 飞行甲板面积
-HAS_ISLAND_POSITION 示例: CVN-68 尼米兹号 → 舰岛位置
-HAS_HOMEPORT 示例: CVN-68 尼米兹号 → 母港
+LENGTH_OVERALL_OF 示例: 舰总长 → CVN-68 尼米兹号
+BEAM_OF 示例: 舷宽 → CVN-68 尼米兹号
+FLIGHT_DECK_WIDTH_OF 示例: 飞行甲板宽 → CVN-68 尼米兹号
+DRAFT_OF 示例: 吃水深度 → CVN-68 尼米兹号
+STANDARD_DISPLACEMENT_OF 示例: 标准排水量 → CVN-68 尼米兹号
+FULL_LOAD_DISPLACEMENT_OF 示例: 满载排水量 → CVN-68 尼米兹号
+SPEED_OF 示例: 航速 → CVN-68 尼米兹号
+RANGE_OF 示例: 续航力 → CVN-68 尼米兹号
+CREW_OF 示例: 舰员编制 → CVN-68 尼米兹号
+AIRCRAFT_CAPACITY_OF 示例: 舰载机数量 → CVN-68 尼米兹号
+POWER_OUTPUT_OF 示例: 推进功率 → CVN-68 尼米兹号
+PROPULSION_OF 示例: 推进装置 → CVN-68 尼米兹号
+FLIGHT_DECK_AREA_OF 示例: 飞行甲板面积 → CVN-68 尼米兹号
+ISLAND_POSITION_OF 示例: 舰岛位置 → CVN-68 尼米兹号
+HOMEPORT_OF 示例: 母港 → CVN-68 尼米兹号
 
 -Steps-
 -Steps-
@@ -344,11 +346,239 @@ HAS_HOMEPORT 示例: CVN-68 尼米兹号 → 母港
 - Shipyard: entity_name MUST be "建造船厂", entity_description is the value
 - Service_Status: entity_name MUST be "服役状态", entity_description is the value
 
-2. For relationships, create connections by strictly imitating the examples in 
-the "已知关系类型" section. Pay close attention to the direction of the arrow (→) 
-in each example — your relationships MUST follow the same direction. 
-For example, BELONGS_TO_CLASS MUST always go Ship_Instance → Ship_Class, 
-never the reverse. Use ONLY the relationship types provided.
+2. For relationships, create connections by strictly following the type-based rules below.
+   These rules apply to ALL ships, regardless of their hull number.
+
+   **Rule 1 - INSTANCE_OF**: Ship_Class → Ship_Instance
+     Example: 尼米兹级 → CVN-68 尼米兹号
+     Example: 尼米兹级 → CVN-69 艾森豪威尔号
+     NEVER reverse.
+
+   **Rule 2 - BOW_OF, STERN_OF, DECK_OF, ISLAND_OF, MAST_OF**:
+     Feature_Entity → Ship_Instance
+     Example: 船首 → CVN-68 尼米兹号
+     Example: 舰岛 → CVN-69 艾森豪威尔号
+
+     INCLUDING CVN-68:
+     船首 → CVN-68 尼米兹号 is CORRECT.
+     舰岛 → CVN-68 尼米兹号 is CORRECT.
+     甲板 → CVN-68 尼米兹号 is CORRECT.
+     船尾 → CVN-68 尼米兹号 is CORRECT.
+     桅杆 → CVN-68 尼米兹号 is CORRECT.
+     CVN-68 尼米兹号 → 船首 is WRONG.
+     CVN-68 尼米兹号 → 舰岛 is WRONG.
+     CVN-68 尼米兹号 → 甲板 is WRONG.
+     CVN-68 尼米兹号 → 船尾 is WRONG.
+     CVN-68 尼米兹号 → 桅杆 is WRONG.
+
+     NEVER reverse for ANY ship.
+
+   **Rule 3 - Text attribute relationships**:
+     LENGTH_OVERALL_OF, BEAM_OF, FLIGHT_DECK_WIDTH_OF, DRAFT_OF,
+     STANDARD_DISPLACEMENT_OF, FULL_LOAD_DISPLACEMENT_OF, SPEED_OF,
+     RANGE_OF, CREW_OF, AIRCRAFT_CAPACITY_OF, POWER_OUTPUT_OF,
+     PROPULSION_OF, FLIGHT_DECK_AREA_OF, ISLAND_POSITION_OF, HOMEPORT_OF
+     must follow:
+     Attribute_Entity → Ship_Instance
+
+     Example: 舰总长 → CVN-68 尼米兹号
+     Example: 舷宽 → CVN-69 艾森豪威尔号
+     Example: 推进功率 → CVN-68 尼米兹号
+
+     INCLUDING CVN-68:
+     舰总长 → CVN-68 尼米兹号 is CORRECT.
+     舷宽 → CVN-68 尼米兹号 is CORRECT.
+     推进功率 → CVN-68 尼米兹号 is CORRECT.
+     航速 → CVN-68 尼米兹号 is CORRECT.
+     舰员编制 → CVN-68 尼米兹号 is CORRECT.
+     舰载机数量 → CVN-68 尼米兹号 is CORRECT.
+     飞行甲板面积 → CVN-68 尼米兹号 is CORRECT.
+     飞行甲板宽 → CVN-68 尼米兹号 is CORRECT.
+     吃水深度 → CVN-68 尼米兹号 is CORRECT.
+     续航力 → CVN-68 尼米兹号 is CORRECT.
+     满载排水量 → CVN-68 尼米兹号 is CORRECT.
+     标准排水量 → CVN-68 尼米兹号 is CORRECT.
+     推进装置 → CVN-68 尼米兹号 is CORRECT.
+     舰岛位置 → CVN-68 尼米兹号 is CORRECT.
+     母港 → CVN-68 尼米兹号 is CORRECT.
+     CVN-68 尼米兹号 → 舰总长 is WRONG.
+     CVN-68 尼米兹号 → 舷宽 is WRONG.
+     CVN-68 尼米兹号 → 推进功率 is WRONG.
+     CVN-68 尼米兹号 → 航速 is WRONG.
+     CVN-68 尼米兹号 → 舰员编制 is WRONG.
+     CVN-68 尼米兹号 → 舰载机数量 is WRONG.
+
+     NEVER reverse for ANY ship.
+
+   **Rule 4 - BUILT, SERVICE_STATUS_OF, ARMOR_PROTECTION_OF**:
+     Source_Entity → Ship_Instance
+
+     Example: 建造船厂 → CVN-68 尼米兹号
+     Example: 服役状态 → CVN-69 艾森豪威尔号
+     Example: 双层舰壳 → CVN-68 尼米兹号
+
+     INCLUDING CVN-68:
+     建造船厂 → CVN-68 尼米兹号 is CORRECT.
+     服役状态 → CVN-68 尼米兹号 is CORRECT.
+     双层舰壳 → CVN-68 尼米兹号 is CORRECT.
+     凯夫拉装甲 → CVN-68 尼米兹号 is CORRECT.
+     HY-80 高强度钢 → CVN-68 尼米兹号 is CORRECT.
+     水密隔舱壁 → CVN-68 尼米兹号 is CORRECT.
+     防火隔壁 → CVN-68 尼米兹号 is CORRECT.
+     水密隔舱 → CVN-68 尼米兹号 is CORRECT.
+     纵向防雷舱壁 → CVN-68 尼米兹号 is CORRECT.
+     X 形吸能支撑结构 → CVN-68 尼米兹号 is CORRECT.
+     CVN-68 尼米兹号 → 建造船厂 is WRONG.
+     CVN-68 尼米兹号 → 服役状态 is WRONG.
+     CVN-68 尼米兹号 → 双层舰壳 is WRONG.
+     CVN-68 尼米兹号 → 凯夫拉装甲 is WRONG.
+
+     NEVER reverse for ANY ship.
+
+   **Rule 5 - EQUIPPED_WITH**:
+     Ship_Instance → Configuration
+     Example: CVN-68 尼米兹号 → CVN-68 雷达套件
+     Example: CVN-68 尼米兹号 → CVN-68 武器套件
+     Example: CVN-68 尼米兹号 → CVN-68 舰载机联队
+     NEVER reverse.
+
+   **Rule 6 - Equipment to Configuration relationships**:
+     RADAR_OF, WEAPON_OF, COUNTERMEASURE_OF, COMBAT_SYSTEM_OF,
+     COMMUNICATION_OF, DATA_LINK_OF, GUN_OF, AIRCRAFT_OF,
+     POWERPLANT_OF, CATAPULT_OF, ARRESTING_GEAR_OF, ARMOR_OF
+     must follow:
+     Equipment_Entity → Configuration
+
+     Example: AN/SPS-48C/E → CVN-68 雷达套件
+     Example: Mk 29 → CVN-69 武器套件
+     Example: A4W 压水核反应堆 → CVN-68 动力套件
+     Example: F/A-18E/F → CVN-68 舰载机联队
+     Example: 勃朗宁 M2 → CVN-68 舰载火炮套件
+
+     INCLUDING CVN-68:
+     AN/SPS-48C/E → CVN-68 雷达套件 is CORRECT.
+     AN/SPS-49(V)5 → CVN-68 雷达套件 is CORRECT.
+     AN/SPS-43A → CVN-68 雷达套件 is CORRECT.
+     AN/SPS-67 → CVN-68 雷达套件 is CORRECT.
+     AN/SPQ-9A → CVN-68 雷达套件 is CORRECT.
+     AN/SPQ-9B → CVN-68 雷达套件 is CORRECT.
+     AN/SPN-46 → CVN-68 雷达套件 is CORRECT.
+     AN/SPN-43C → CVN-68 雷达套件 is CORRECT.
+     AN/SPN-41 → CVN-68 雷达套件 is CORRECT.
+     Mk 91 NSSM → CVN-68 雷达套件 is CORRECT.
+     Mk 95 → CVN-68 雷达套件 is CORRECT.
+     SPS-64(V)9 → CVN-68 雷达套件 is CORRECT.
+     URN-25 → CVN-68 雷达套件 is CORRECT.
+     Mk 29 → CVN-68 武器套件 is CORRECT.
+     RIM-7 → CVN-68 武器套件 is CORRECT.
+     Mk 49 → CVN-68 武器套件 is CORRECT.
+     RIM-116 → CVN-68 武器套件 is CORRECT.
+     Mk 15 → CVN-68 武器套件 is CORRECT.
+     Mk 38 → CVN-68 舰载火炮套件 is CORRECT.
+     勃朗宁 M2 → CVN-68 舰载火炮套件 is CORRECT.
+     AN/SLQ-32(V)4 → CVN-68 电子战套件 is CORRECT.
+     AN/WLR-1H → CVN-68 电子战套件 is CORRECT.
+     Mk 36 SRBOC → CVN-68 电子战套件 is CORRECT.
+     AN/SLQ-25 → CVN-68 电子战套件 is CORRECT.
+     SLQ-29 → CVN-68 电子战套件 is CORRECT.
+     ACDS → CVN-68 作战系统套件 is CORRECT.
+     NTDS → CVN-68 作战系统套件 is CORRECT.
+     SSDS Mk 2 → CVN-68 作战系统套件 is CORRECT.
+     MK-23 TAS → CVN-68 作战系统套件 is CORRECT.
+     SRR-1 → CVN-68 通信套件 is CORRECT.
+     WSC-3 → CVN-68 通信套件 is CORRECT.
+     WSC-6 → CVN-68 通信套件 is CORRECT.
+     USC-38 → CVN-68 通信套件 is CORRECT.
+     LINK-4A → CVN-68 数据链套件 is CORRECT.
+     LINK-11 → CVN-68 数据链套件 is CORRECT.
+     LINK-14 → CVN-68 数据链套件 is CORRECT.
+     LINK-16 → CVN-68 数据链套件 is CORRECT.
+     F/A-18E/F → CVN-68 舰载机联队 is CORRECT.
+     F/A-18C/D → CVN-68 舰载机联队 is CORRECT.
+     E-2C → CVN-68 舰载机联队 is CORRECT.
+     EA-6B → CVN-68 舰载机联队 is CORRECT.
+     EA-18G → CVN-68 舰载机联队 is CORRECT.
+     S-3A/B → CVN-68 舰载机联队 is CORRECT.
+     SH-60F → CVN-68 舰载机联队 is CORRECT.
+     HH-60H → CVN-68 舰载机联队 is CORRECT.
+     MH-60R → CVN-68 舰载机联队 is CORRECT.
+     C-2 → CVN-68 舰载机联队 is CORRECT.
+     A4W 压水核反应堆 → CVN-68 动力套件 is CORRECT.
+     蒸汽涡轮发动机 → CVN-68 动力套件 is CORRECT.
+     四轴双主舵 → CVN-68 动力套件 is CORRECT.
+     汽轮发电机 → CVN-68 动力套件 is CORRECT.
+     应急柴油发电机 → CVN-68 动力套件 is CORRECT.
+     弹射器 → CVN-68 弹射器套件 is CORRECT.
+     拦阻索 → CVN-68 拦阻装置套件 is CORRECT.
+     拦阻网 → CVN-68 拦阻装置套件 is CORRECT.
+     双层舰壳 → CVN-68 装甲防护套件 is CORRECT.
+     X 形吸能支撑结构 → CVN-68 装甲防护套件 is CORRECT.
+     HY-80 高强度钢 → CVN-68 装甲防护套件 is CORRECT.
+     水密隔舱壁 → CVN-68 装甲防护套件 is CORRECT.
+     防火隔壁 → CVN-68 装甲防护套件 is CORRECT.
+     水密隔舱 → CVN-68 装甲防护套件 is CORRECT.
+     纵向防雷舱壁 → CVN-68 装甲防护套件 is CORRECT.
+     凯夫拉装甲 → CVN-68 装甲防护套件 is CORRECT.
+     CVN-68 雷达套件 → AN/SPS-48C/E is WRONG.
+     CVN-68 武器套件 → Mk 29 is WRONG.
+     CVN-68 舰载火炮套件 → 勃朗宁 M2 is WRONG.
+     CVN-68 舰载机联队 → F/A-18E/F is WRONG.
+     CVN-68 动力套件 → A4W 压水核反应堆 is WRONG.
+
+     NEVER reverse for ANY ship.
+
+   **Rule 7 - Equipment to Function relationships**:
+     HAS_RADAR_FUNCTION, HAS_COUNTERMEASURE_FUNCTION, HAS_COMBAT_FUNCTION,
+     HAS_COMMUNICATION_FUNCTION, HAS_WEAPON_FUNCTION, HAS_AIRCRAFT_FUNCTION,
+     HAS_SHIPBOARD_GUN_FUNCTION
+     must follow:
+     Equipment_Entity → Function_Entity
+     Example: AN/SPS-48C/E → 对空搜索
+     Example: Mk 15 → 近防系统
+     Example: 勃朗宁 M2 → 重机枪
+     Example: F/A-18E/F → 战斗攻击机
+     NEVER reverse. Function_Entity → Equipment_Entity is WRONG.
+
+   **Self-Check Before Output**:
+   Before final output, check every relationship according to Rule 1 - Rule 7 above.
+
+   1. The direction must be determined by the exact relationship type, not only by the `_OF` suffix.
+
+   2. If a relationship expresses a valid fact from the input text but its source and target are reversed, output the same relationship in the schema-correct direction defined by Rule 1 - Rule 7.
+
+      Example:
+      Wrong: CVN-68 尼米兹号 → 推进功率
+      Correct: 推进功率 → CVN-68 尼米兹号
+
+      Example:
+      Wrong: 对空搜索 → AN/SPS-48E
+      Correct: AN/SPS-48E → 对空搜索
+
+   3. Do NOT output both directions for the same relationship.
+
+   4. Do NOT create any relationship type outside the predefined relationship list.
+
+   5. Do NOT create any entity name outside the known entity dictionary.
+
+   6. If an entity appears in the input text with extra descriptive words, first normalize it to the closest valid entity name in the known entity dictionary.
+      Example:
+      "勃朗宁 M2 重机枪" → "勃朗宁 M2"
+      "Mk 38 遥控机炮" → "Mk 38"
+
+   7. If a relationship is clearly supported by the current ship block and both entities can be normalized to known dictionary entities, keep the relationship and output it in the schema-correct direction.
+
+   8. Only skip a relationship when it is not supported by the input text, or when its entities cannot be normalized to any known dictionary entity.
+
+   **Completeness Check**:
+   - After processing ALL ships, verify that every Ship_Instance explicitly appearing in the input has been extracted.
+   - For each Ship_Instance, extract only the relationships explicitly supported by its own [SHIP] block.
+   - If a relationship is clearly present in the current ship block, keep it and output it in the schema-correct direction.
+   - Do NOT delete a valid relationship only because its direction was initially reversed; correct the direction instead.
+   - Do NOT copy relationships from other ships.
+   - Do NOT infer missing equipment, attributes, or functions from other ships.
+   - Do NOT add any relationship that is not explicitly supported by the current ship's own text.
+
+   Use ONLY the relationship types provided.
 
 3. **CRITICAL FORMAT RULES**:
 The markers <entity_name> and <source_entity> in the format template below are ONLY PLACEHOLDERS.
@@ -365,6 +595,11 @@ Format each relationship exactly as:
 ("relationship"{tuple_delimiter}source_entity{tuple_delimiter}target_entity{tuple_delimiter}relationship_type{tuple_delimiter}strength)
 
 **Remember**: The final output must contain only the plain text names, never "<" or ">".
+
+**Output Integrity Check**:
+- Every entity_name in a relationship MUST be a complete, valid entity name that exists in the known entity dictionary.
+- If an entity name is incomplete or truncated (e.g., "CVN(" or "AN("), DO NOT output it.
+- If you cannot find the complete entity name, skip that relationship.
 
 
 4. Return output in English as a single list. Use **{record_delimiter}** as the list delimiter. When finished, output {completion_delimiter}
