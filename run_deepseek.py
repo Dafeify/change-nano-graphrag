@@ -53,10 +53,13 @@ from nano_graphrag import GraphRAG, QueryParam
 from nano_graphrag.base import BaseKVStorage
 from nano_graphrag._utils import compute_args_hash
 
+from dotenv import load_dotenv
+load_dotenv()  # 加载 .env 文件到环境变量
+
 # --- 模型配置 ---
 MODEL = "deepseek-ai/DeepSeek-V3"
 BASE_URL = "https://api.siliconflow.cn/v1"
-API_KEY = ""  # 临时硬编码，测试完记得改回环境变量
+API_KEY = os.getenv("SILICONFLOW_API_KEY")  # 从环境变量读取
 
 # --- 自定义大模型调用函数 ---
 async def siliconflow_llm_complete(
@@ -126,7 +129,7 @@ def print_entities_and_relations(working_dir):
         print(f"\n--- {etype} ({len(items)} 个) ---")
         for name, desc in items:
             if desc and desc != "无":
-                print(f"  · {name} (描述: {desc})")
+                print(f"  · {name} | 描述: {desc}")
             else:
                 print(f"  · {name}")
 
@@ -410,8 +413,6 @@ async def main():
     print("【步骤2】图谱匹配结果：")
     match_result = await match_candidates(graph_func, observed_json)
     print(match_result)
-
-
 
 
 

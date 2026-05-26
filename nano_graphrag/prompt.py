@@ -226,59 +226,85 @@ MH-60R, MH-60R/S, SH-60, UH-60, C-2, C-2A
 - 【提取规则】仅逐行提取 [CONFIGURATION] 区块内真实存在的行，无中生有的配置名（如战斗套件、对抗套件）严禁输出。
 - 【数量约束】每一艘舰船的 [CONFIGURATION] 有多少行，就生成多少个 Configuration 实体，不多生成、不少生成。
 
-## 已知关系类型 (必须严格使用)
+## 已知关系类型 (必须严格模仿以下示例的方向)
 ### 身份归属
-BELONGS_TO_CLASS: (Ship_Instance) -> (Ship_Class)
+BELONGS_TO_CLASS 示例: CVN-68 尼米兹号 → 尼米兹级
 ### 视觉特征
-HAS_BOW: (Ship_Instance) -> (船首)
-HAS_STERN: (Ship_Instance) -> (船尾)
-HAS_DECK: (Ship_Instance) -> (甲板)
-HAS_ISLAND: (Ship_Instance) -> (舰岛)
-HAS_MAST: (Ship_Instance) -> (桅杆)
+HAS_BOW 示例: CVN-68 尼米兹号 → 船首
+HAS_STERN 示例: CVN-68 尼米兹号 → 船尾
+HAS_DECK 示例: CVN-68 尼米兹号 → 甲板
+HAS_ISLAND 示例: CVN-68 尼米兹号 → 舰岛
+HAS_MAST 示例: CVN-68 尼米兹号 → 桅杆
 ### 装备套件连接
-EQUIPPED_WITH: (Ship_Instance) -> (Configuration)
-HAS_RADAR: (Configuration) -> (Radar_System)
-HAS_COUNTERMEASURE: (Configuration) -> (Countermeasure_System)
-HAS_COMBAT: (Configuration) -> (Combat_System)
-HAS_COMMUNICATION: (Configuration) -> (Communication_System)
-HAS_DATA_LINK: (Configuration) -> (Data_Link)
-HAS_WEAPON: (Configuration) -> (Weapon_System)
-HAS_GUN: (Configuration) -> (Shipboard_Gun)
-HAS_AIRCRAFT: (Configuration) -> (Aircraft)
-HAS_POWERPLANT: (Configuration) -> (Powerplant)
-HAS_CATAPULT_EQUIP: (Configuration) -> (Catapult)
-HAS_ARRESTING_EQUIP: (Configuration) -> (Arresting_Gear)
-HAS_ARMOR: (Configuration) -> (Armor_Protection)
+EQUIPPED_WITH 示例: CVN-68 尼米兹号 → CVN-68 雷达套件
+HAS_RADAR 示例: CVN-68 雷达套件 → AN/SPS-48C/E
+HAS_COUNTERMEASURE 示例: CVN-68 电子战套件 → AN/SLQ-32(V)4
+HAS_COMBAT 示例: CVN-68 作战系统套件 → ACDS
+HAS_COMMUNICATION 示例: CVN-68 通信套件 → SRR-1
+HAS_DATA_LINK 示例: CVN-68 数据链套件 → LINK-4A
+HAS_WEAPON 示例: CVN-68 武器套件 → Mk 29
+HAS_GUN 示例: CVN-68 舰载火炮套件 → Mk 38
+HAS_AIRCRAFT 示例: CVN-68 舰载机联队 → F/A-18E/F
+HAS_POWERPLANT 示例: CVN-68 动力套件 → A4W 压水核反应堆
+HAS_CATAPULT_EQUIP 示例: CVN-68 弹射器套件 → 弹射器
+HAS_ARRESTING_EQUIP 示例: CVN-68 拦阻装置套件 → 拦阻索
+HAS_ARMOR 示例: CVN-68 装甲防护套件 → 双层舰壳
 ### 功能分类连接
-HAS_RADAR_FUNCTION: (Radar_System) -> (Radar_Function)
-HAS_COUNTERMEASURE_FUNCTION: (Countermeasure_System) -> (Countermeasure_Function)
-HAS_COMBAT_FUNCTION: (Combat_System) -> (Combat_Function)
-HAS_COMMUNICATION_FUNCTION: (Communication_System) -> (Communication_Function)
-HAS_WEAPON_FUNCTION: (Weapon_System) -> (Weapon_Function)
-HAS_AIRCRAFT_FUNCTION: (Aircraft) -> (Aircraft_Function)
-HAS_SHIPBOARD_GUN_FUNCTION: (Shipboard_Gun) -> (Shipboard_Gun_Function)
+HAS_RADAR_FUNCTION 示例: AN/SPS-48C/E → 对空搜索
+HAS_COUNTERMEASURE_FUNCTION 示例: AN/SLQ-32(V)4 → 电子战
+HAS_COMBAT_FUNCTION 示例: ACDS → 战斗指挥
+HAS_COMMUNICATION_FUNCTION 示例: SRR-1 → 卫星通信
+HAS_WEAPON_FUNCTION 示例: Mk 29 → 导弹发射装置
+HAS_AIRCRAFT_FUNCTION 示例: F/A-18E/F → 战斗攻击机
+HAS_SHIPBOARD_GUN_FUNCTION 示例: Mk 38 → 遥控机炮
 ### 辅助功能与结构连接
-HAS_ARMOR_PROTECTION: (Ship_Instance) -> (Armor_Protection)
-BUILT_BY: (Ship_Instance) -> (建造船厂)
-HAS_SERVICE_STATUS: (Ship_Instance) -> (服役状态)
+HAS_ARMOR_PROTECTION 示例: CVN-68 尼米兹号 → 双层舰壳
+BUILT_BY 示例: CVN-68 尼米兹号 → 建造船厂
+HAS_SERVICE_STATUS 示例: CVN-68 尼米兹号 → 服役状态
 ### 纯文本属性连接
-HAS_LENGTH_OVERALL: (Ship_Instance) -> (舰总长)
-HAS_BEAM: (Ship_Instance) -> (舷宽)
-HAS_FLIGHT_DECK_WIDTH: (Ship_Instance) -> (飞行甲板宽)
-HAS_DRAFT: (Ship_Instance) -> (吃水深度)
-HAS_STANDARD_DISPLACEMENT: (Ship_Instance) -> (标准排水量)
-HAS_FULL_LOAD_DISPLACEMENT: (Ship_Instance) -> (满载排水量)
-HAS_SPEED: (Ship_Instance) -> (航速)
-HAS_RANGE: (Ship_Instance) -> (续航力)
-HAS_CREW: (Ship_Instance) -> (舰员编制)
-HAS_AIRCRAFT_CAPACITY: (Ship_Instance) -> (舰载机数量)
-HAS_POWER_OUTPUT: (Ship_Instance) -> (推进功率)
-HAS_PROPULSION: (Ship_Instance) -> (推进装置)
-HAS_FLIGHT_DECK_AREA: (Ship_Instance) -> (飞行甲板面积)
-HAS_ISLAND_POSITION: (Ship_Instance) -> (舰岛位置)
-HAS_HOMEPORT: (Ship_Instance) -> (母港)
+HAS_LENGTH_OVERALL 示例: CVN-68 尼米兹号 → 舰总长
+HAS_BEAM 示例: CVN-68 尼米兹号 → 舷宽
+HAS_FLIGHT_DECK_WIDTH 示例: CVN-68 尼米兹号 → 飞行甲板宽
+HAS_DRAFT 示例: CVN-68 尼米兹号 → 吃水深度
+HAS_STANDARD_DISPLACEMENT 示例: CVN-68 尼米兹号 → 标准排水量
+HAS_FULL_LOAD_DISPLACEMENT 示例: CVN-68 尼米兹号 → 满载排水量
+HAS_SPEED 示例: CVN-68 尼米兹号 → 航速
+HAS_RANGE 示例: CVN-68 尼米兹号 → 续航力
+HAS_CREW 示例: CVN-68 尼米兹号 → 舰员编制
+HAS_AIRCRAFT_CAPACITY 示例: CVN-68 尼米兹号 → 舰载机数量
+HAS_POWER_OUTPUT 示例: CVN-68 尼米兹号 → 推进功率
+HAS_PROPULSION 示例: CVN-68 尼米兹号 → 推进装置
+HAS_FLIGHT_DECK_AREA 示例: CVN-68 尼米兹号 → 飞行甲板面积
+HAS_ISLAND_POSITION 示例: CVN-68 尼米兹号 → 舰岛位置
+HAS_HOMEPORT 示例: CVN-68 尼米兹号 → 母港
 
 -Steps-
+-Steps-
+0. **CRITICAL: Handling Parentheses in Entity Names**
+   **Dictionary-First Rule**: Before applying any parentheses splitting, 
+   check if the ENTIRE text (including parentheses) matches an entity 
+   in the known entity dictionary above.
+   - If the full text (with parentheses) is found in the dictionary → 
+     keep it as the complete entity_name, do NOT split.
+     * "AN/SPS-49(V)5" → matches dictionary, entity_name: "AN/SPS-49(V)5"
+     * "AN/SLQ-32(V)4" → matches dictionary, entity_name: "AN/SLQ-32(V)4"
+     * "TESS UMM-1(V)1" → matches dictionary, entity_name: "TESS UMM-1(V)1"
+   
+   **Splitting Rule**: If the full text does NOT match any dictionary entry:
+   - The entity_name is ONLY the part before the parentheses
+   - The part inside parentheses is the entity_description
+   - Examples:
+     * "弹射器(C-13-1)" → not in dictionary as full text, split to 
+       entity_name: "弹射器", entity_description: "C-13-1"
+     * "A-6E(退役)" → not in dictionary as full text, split to 
+       entity_name: "A-6E", entity_description: "退役"
+     * "拦阻索(Mk 7 Mod 3 型)" → not in dictionary as full text, split to 
+       entity_name: "拦阻索", entity_description: "Mk 7 Mod 3 型"
+   
+   This rule applies to ALL sections in the input text.
+
+
+
 1. For each section, extract entities as follows:
 
 **Identity sections ([SHIP])**:
@@ -310,12 +336,19 @@ HAS_HOMEPORT: (Ship_Instance) -> (母港)
 - entity_name is the line before the colon
 - The items listed below are NOT entities, they define relationships
 - NO additional Configuration entities allowed: only extract lines that exist in the input text.
+- You MUST create all relationship connections for EVERY item listed under each Configuration entity. 
+  For example, if a Configuration entity lists 3 items, you must create 3 separate relationships.
+
 
 **Auxiliary sections**:
 - Shipyard: entity_name MUST be "建造船厂", entity_description is the value
 - Service_Status: entity_name MUST be "服役状态", entity_description is the value
 
-2. For relationships, create connections as listed in the "已知关系类型" section, using ONLY the relationship types provided.
+2. For relationships, create connections by strictly imitating the examples in 
+the "已知关系类型" section. Pay close attention to the direction of the arrow (→) 
+in each example — your relationships MUST follow the same direction. 
+For example, BELONGS_TO_CLASS MUST always go Ship_Instance → Ship_Class, 
+never the reverse. Use ONLY the relationship types provided.
 
 3. **CRITICAL FORMAT RULES**:
 The markers <entity_name> and <source_entity> in the format template below are ONLY PLACEHOLDERS.
