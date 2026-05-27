@@ -153,7 +153,7 @@ ACDS, ACDS Block 0/1, ACDS Block 1, NTDS, SSDS Mk 2, MK-23 TAS
 战斗指挥, 战术数据, 舰艇自卫, 目标搜获, 信息指挥
 ### Communication_System
 SRR-1, WSC-3, WSC-6, USC-38, SSQ-82, SQQ-1, JOTS, POST, CVIC,
-TESS UMM-1(V)1, JMCIS, SSQ-1A, 全光纤数字化通信系统, IT21, IT‑21 非保密型局域网系统
+TESS UMM-1(V)1, JMCIS, SSQ-1A, 全光纤数字化通信系统,  IT-21
 ### Communication_Function
 卫星通信, 战术环境支援, 航母情报, 指挥信息系统, 联合战术系统
 ### Data_Link
@@ -227,7 +227,10 @@ MH-60R, MH-60R/S, SH-60, UH-60, C-2, C-2A
 - 【数量约束】每一艘舰船的 [CONFIGURATION] 有多少行，就生成多少个 Configuration 实体，不多生成、不少生成。
 
 ## 已知关系类型 (必须严格模仿以下示例的方向，禁止任何反转)
-⚠️ 【方向区分铁律】所有带 `_OF` 后缀的关系：属性 → 实体；所有带 `HAS_*_FUNCTION` 前缀的关系：设备 → 功能
+⚠️ 【方向区分铁律】关系方向必须根据具体关系类型判断，不能只根据 `_OF` 后缀判断。
+视觉特征、纯文本属性、辅助结构关系的方向是：属性/特征/结构实体 → Ship_Instance。
+装备套件关系的方向是：装备/系统实体 → Configuration。
+功能分类关系的方向是：装备/系统实体 → Function。
 
 ### 身份归属
 INSTANCE_OF 示例: 尼米兹级 → CVN-68 尼米兹号

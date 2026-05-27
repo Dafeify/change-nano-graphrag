@@ -61,38 +61,734 @@ MODEL = "deepseek-ai/DeepSeek-V3"
 BASE_URL = "https://api.siliconflow.cn/v1"
 API_KEY = os.getenv("SILICONFLOW_API_KEY")  # 从环境变量读取
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ==================== 受控实体词典与通用实体名规范化 ====================
+import re
+import unicodedata
+
+KNOWN_ENTITIES = {
+    "SHIP_CLASS": [
+        "尼米兹级",
+    ],
+
+    "SHIP_INSTANCE": [
+        "CVN-68 尼米兹号",
+        "CVN-69 艾森豪威尔号",
+        "CVN-70 卡尔文森号",
+        "CVN-71 西奥多·罗斯福号",
+        "CVN-72 亚伯拉罕·林肯号",
+        "CVN-73 乔治·华盛顿号",
+        "CVN-74 约翰·C·斯坦尼斯号",
+        "CVN-75 哈里·S·杜鲁门号",
+        "CVN-76 罗纳德·里根号",
+        "CVN-77 乔治·H·W·布什号",
+    ],
+
+    # 固定视觉属性节点
+    "BOW": ["船首"],
+    "STERN": ["船尾"],
+    "DECK": ["甲板"],
+    "ISLAND": ["舰岛"],
+    "MAST": ["桅杆"],
+
+    # 固定文本属性节点
+    "LENGTH_OVERALL": ["舰总长"],
+    "BEAM": ["舷宽"],
+    "FLIGHT_DECK_WIDTH": ["飞行甲板宽"],
+    "DRAFT": ["吃水深度"],
+    "STANDARD_DISPLACEMENT": ["标准排水量"],
+    "FULL_LOAD_DISPLACEMENT": ["满载排水量"],
+    "SPEED": ["航速"],
+    "RANGE": ["续航力"],
+    "CREW": ["舰员编制"],
+    "AIRCRAFT_CAPACITY": ["舰载机数量"],
+    "POWER_OUTPUT": ["推进功率"],
+    "PROPULSION": ["推进装置"],
+    "FLIGHT_DECK_AREA": ["飞行甲板面积"],
+    "ISLAND_POSITION": ["舰岛位置"],
+    "HOMEPORT": ["母港"],
+
+    # 辅助固定节点
+    "SHIPYARD": ["建造船厂"],
+    "SERVICE_STATUS": ["服役状态"],
+
+    # 装备类
+    "POWERPLANT": [
+        "A4W 压水核反应堆",
+        "A4W/A1G 压水核反应堆",
+        "蒸汽涡轮发动机",
+        "四轴双主舵",
+        "四轴四桨",
+        "四轴五桨",
+        "四桨四轴双舵",
+        "汽轮发电机",
+        "应急柴油发电机",
+        "备用柴油机",
+    ],
+
+    "CATAPULT": [
+        "弹射器",
+    ],
+
+    "ARRESTING_GEAR": [
+        "拦阻索",
+        "拦阻网",
+    ],
+
+    "RADAR_SYSTEM": [
+        "AN/SPS-48C/E",
+        "AN/SPS-48E",
+        "AN/SPS-49(V)1",
+        "AN/SPS-49(V)5",
+        "AN/SPS-43A",
+        "AN/SPS-67",
+        "AN/SPS-67V",
+        "AN/SPS-67V-1",
+        "AN/SPQ-9A",
+        "AN/SPQ-9B",
+        "AN/SPN-46",
+        "AN/SPN-43C",
+        "AN/SPN-41",
+        "AN/SPN-44",
+        "Mk 91 NSSM",
+        "Mk 95",
+        "MK91-1",
+        "MK-73",
+        "SPS-64(V)9",
+        "LN-66",
+        "URN-25",
+        "MK23 TAS",
+    ],
+
+    "RADAR_FUNCTION": [
+        "对空搜索",
+        "对海搜索",
+        "火控",
+        "空中管制",
+        "目标截获",
+        "导航",
+        "测速",
+    ],
+
+    "COUNTERMEASURE_SYSTEM": [
+        "AN/SLQ-32(V)4",
+        "SLY-2",
+        "AN/WLR-1H",
+        "Mk 36 SRBOC",
+        "AN/SLQ-25",
+        "SLQ-25A",
+        "SLQ-29",
+        "SLQ-36",
+    ],
+
+    "COUNTERMEASURE_FUNCTION": [
+        "电子战",
+        "电子侦察",
+        "诱饵发射",
+        "拖曳鱼雷诱饵",
+        "电子干扰",
+    ],
+
+    "COMBAT_SYSTEM": [
+        "ACDS",
+        "ACDS Block 0/1",
+        "ACDS Block 1",
+        "NTDS",
+        "SSDS Mk 2",
+        "MK-23 TAS",
+    ],
+
+    "COMBAT_FUNCTION": [
+        "战斗指挥",
+        "战术数据",
+        "舰艇自卫",
+        "目标搜获",
+        "信息指挥",
+    ],
+
+    "COMMUNICATION_SYSTEM": [
+        "SRR-1",
+        "WSC-3",
+        "WSC-6",
+        "USC-38",
+        "SSQ-82",
+        "SQQ-1",
+        "JOTS",
+        "POST",
+        "CVIC",
+        "TESS UMM-1(V)1",
+        "JMCIS",
+        "SSQ-1A",
+        "全光纤数字化通信系统",
+        "IT-21",
+    ],
+
+    "COMMUNICATION_FUNCTION": [
+        "卫星通信",
+        "战术环境支援",
+        "航母情报",
+        "指挥信息系统",
+        "联合战术系统",
+    ],
+
+    "DATA_LINK": [
+        "LINK-4A",
+        "LINK-11",
+        "LINK-14",
+        "LINK-16",
+    ],
+
+    "WEAPON_SYSTEM": [
+        "Mk 25",
+        "Mk 29",
+        "Mk 31",
+        "Mk 49",
+        "Mk 57 Mod 3",
+        "RIM-7",
+        "RIM-7M",
+        "RIM-116",
+        "Mk 15",
+        "LOCUST",
+        "三联装324毫米鱼雷发射管",
+    ],
+
+    "WEAPON_FUNCTION": [
+        "短程防空",
+        "近防系统",
+        "导弹发射装置",
+        "激光武器",
+        "鱼雷发射装置",
+    ],
+
+    "SHIPBOARD_GUN": [
+        "Mk 38",
+        "勃朗宁 M2",
+    ],
+
+    "SHIPBOARD_GUN_FUNCTION": [
+        "遥控机炮",
+        "重机枪",
+    ],
+
+    "AIRCRAFT": [
+        "F/A-18E/F",
+        "F/A-18C/D",
+        "F/A-18A/B/C/D",
+        "F/A-18A/C/E",
+        "F/A-18F",
+        "F/A-18",
+        "F-14",
+        "F-14D",
+        "F-14A/B/D",
+        "F-35C",
+        "E-2C",
+        "E-2D",
+        "E-2",
+        "EA-6B",
+        "EA-18G",
+        "A-6E",
+        "S-3A/B",
+        "S-3A",
+        "S-3B",
+        "ES-3A",
+        "SH-3G/H",
+        "SH-3G",
+        "SH-3H",
+        "SH-60F",
+        "HH-60H",
+        "MH-60R",
+        "MH-60R/S",
+        "SH-60",
+        "UH-60",
+        "C-2",
+        "C-2A",
+    ],
+
+    "AIRCRAFT_FUNCTION": [
+        "战斗攻击机",
+        "电子战飞机",
+        "预警机",
+        "反潜机",
+        "侦察机",
+        "运输机",
+        "直升机",
+    ],
+
+    "ARMOR_PROTECTION": [
+        "双层舰壳",
+        "X 形吸能支撑结构",
+        "HY-80 高强度钢",
+        "水密隔舱壁",
+        "防火隔壁",
+        "水密隔舱",
+        "纵向防雷舱壁",
+        "凯夫拉装甲",
+        "先进灭火系统",
+        "高强度合金钢",
+        "多层隔离防护结构",
+        "隐身吸波材料",
+        "高弹性钢",
+        "泡沫消防装置",
+        "双层船体",
+        "X形构件",
+        "多层隔舱防护",
+        "箱型防御结构",
+    ],
+}
+
+
+ENTITY_TYPE_ALIASES = {
+    "Ship_Class": "SHIP_CLASS",
+    "Ship_Instance": "SHIP_INSTANCE",
+    "Bow": "BOW",
+    "Stern": "STERN",
+    "Deck": "DECK",
+    "Island": "ISLAND",
+    "Mast": "MAST",
+    "Radar_System": "RADAR_SYSTEM",
+    "Countermeasure_System": "COUNTERMEASURE_SYSTEM",
+    "Combat_System": "COMBAT_SYSTEM",
+    "Communication_System": "COMMUNICATION_SYSTEM",
+    "Data_Link": "DATA_LINK",
+    "Weapon_System": "WEAPON_SYSTEM",
+    "Shipboard_Gun": "SHIPBOARD_GUN",
+    "Aircraft": "AIRCRAFT",
+    "Powerplant": "POWERPLANT",
+    "Catapult": "CATAPULT",
+    "Arresting_Gear": "ARRESTING_GEAR",
+    "Radar_Function": "RADAR_FUNCTION",
+    "Countermeasure_Function": "COUNTERMEASURE_FUNCTION",
+    "Combat_Function": "COMBAT_FUNCTION",
+    "Communication_Function": "COMMUNICATION_FUNCTION",
+    "Weapon_Function": "WEAPON_FUNCTION",
+    "Aircraft_Function": "AIRCRAFT_FUNCTION",
+    "Shipboard_Gun_Function": "SHIPBOARD_GUN_FUNCTION",
+    "Armor_Protection": "ARMOR_PROTECTION",
+    "Shipyard": "SHIPYARD",
+    "Service_Status": "SERVICE_STATUS",
+    "Length_Overall": "LENGTH_OVERALL",
+    "Beam": "BEAM",
+    "Flight_Deck_Width": "FLIGHT_DECK_WIDTH",
+    "Draft": "DRAFT",
+    "Standard_Displacement": "STANDARD_DISPLACEMENT",
+    "Full_Load_Displacement": "FULL_LOAD_DISPLACEMENT",
+    "Speed": "SPEED",
+    "Range": "RANGE",
+    "Crew": "CREW",
+    "Aircraft_Capacity": "AIRCRAFT_CAPACITY",
+    "Power_Output": "POWER_OUTPUT",
+    "Propulsion": "PROPULSION",
+    "Flight_Deck_Area": "FLIGHT_DECK_AREA",
+    "Island_Position": "ISLAND_POSITION",
+    "Homeport": "HOMEPORT",
+    "Configuration": "CONFIGURATION",
+}
+
+
+SHIP_DEPENDENT_TYPES = {
+    # 视觉固定槽位
+    "BOW", "STERN", "DECK", "ISLAND", "MAST",
+
+    # 纯文本属性固定槽位
+    "LENGTH_OVERALL", "BEAM", "FLIGHT_DECK_WIDTH", "DRAFT",
+    "STANDARD_DISPLACEMENT", "FULL_LOAD_DISPLACEMENT", "SPEED",
+    "RANGE", "CREW", "AIRCRAFT_CAPACITY", "POWER_OUTPUT",
+    "PROPULSION", "FLIGHT_DECK_AREA", "ISLAND_POSITION", "HOMEPORT",
+
+    # 固定设备名，但具体型号随舰变化
+    "CATAPULT", "ARRESTING_GEAR",
+
+    # 辅助固定槽位
+    "SHIPYARD", "SERVICE_STATUS",
+}
+
+
+def kg_clean_name(x) -> str:
+    return str(x or "").strip().strip('"')
+
+
+def kg_entity_type(entity_type: str) -> str:
+    entity_type = str(entity_type or "UNKNOWN").strip().strip('"')
+    return ENTITY_TYPE_ALIASES.get(entity_type, entity_type).upper()
+
+
+def kg_lookup_key(name: str) -> str:
+    """
+    只用于匹配，不作为最终实体名写入图谱。
+    目的：让 ACDS BLOCK 0/1、ACDS Block 0/1、ACDS block 0/1 映射到同一个 key。
+    """
+    s = kg_clean_name(name)
+
+    if not s:
+        return ""
+
+    s = unicodedata.normalize("NFKC", s)
+
+    # 统一不同连字符
+    s = (
+        s.replace("-", "-")
+         .replace("–", "-")
+         .replace("—", "-")
+         .replace("－", "-")
+    )
+
+    # 去掉空格、下划线、引号；大小写统一仅用于比较
+    s = re.sub(r'[\s_"“”\'`]+', "", s)
+    s = s.casefold()
+
+    return s
+
+
+def build_known_entity_index():
+    by_type = {}
+    all_types = {}
+
+    for etype, names in KNOWN_ENTITIES.items():
+        etype = kg_entity_type(etype)
+        by_type[etype] = {}
+
+        for name in names:
+            key = kg_lookup_key(name)
+            if key:
+                by_type[etype][key] = name
+
+                # 全局索引用于兜底；同名冲突时保留第一次出现
+                all_types.setdefault(key, name)
+
+    return by_type, all_types
+
+
+KNOWN_ENTITY_INDEX_BY_TYPE, KNOWN_ENTITY_INDEX_ALL = build_known_entity_index()
+
+
+def canonicalize_entity_name(raw_name: str, entity_type: str = None, extra_names=None, allow_unknown: bool = False) -> str:
+    """
+    词典驱动的实体名标准化。
+
+    返回：
+    - 标准实体名
+    - "" 表示无法映射到词典，不应写入主图
+    """
+    raw_name = kg_clean_name(raw_name)
+
+    if not raw_name or raw_name in {"未知", "无"}:
+        return ""
+
+    etype = kg_entity_type(entity_type)
+
+    # Configuration 是动态实体，来自 naval_data 的 [CONFIGURATION] 标题
+    if extra_names:
+        extra_index = {kg_lookup_key(x): x for x in extra_names}
+        key = kg_lookup_key(raw_name)
+
+        if key in extra_index:
+            return extra_index[key]
+
+    # 优先按实体类型匹配
+    key = kg_lookup_key(raw_name)
+
+    if etype in KNOWN_ENTITY_INDEX_BY_TYPE and key in KNOWN_ENTITY_INDEX_BY_TYPE[etype]:
+        return KNOWN_ENTITY_INDEX_BY_TYPE[etype][key]
+
+    # 再全局兜底
+    if key in KNOWN_ENTITY_INDEX_ALL:
+        return KNOWN_ENTITY_INDEX_ALL[key]
+
+    # 视觉具体描述不能作为实体名，统一回固定节点
+    visual_alias = {
+        "球鼻艏": "船首",
+        "球鼻首": "船首",
+        "舰首锐削": "船首",
+        "直立舰首": "船首",
+        "方形船尾": "船尾",
+        "舰尾收缩": "船尾",
+        "圆形舰尾": "船尾",
+        "斜角甲板": "甲板",
+        "全通甲板": "甲板",
+        "滑跃甲板": "甲板",
+        "斜角甲板，直角甲板": "甲板",
+        "舰岛位于右舷": "舰岛",
+        "舰岛位于右舷中部": "舰岛",
+        "舰岛位于右舷，靠近舰艉": "舰岛",
+        "复合桅杆（与舰桥融为一体的封闭式桅杆）": "桅杆",
+        "塔状桅杆，与舰岛整合": "桅杆",
+        "细长高大的柱状综合桅杆": "桅杆",
+    }
+
+    if raw_name in visual_alias:
+        return visual_alias[raw_name]
+
+    # IT-21 的文本变体统一
+    it21_aliases = {
+        "IT21",
+        "IT-21",
+        "IT-21",
+        "IT-21 非保密型局域网系统",
+        "IT-21 非保密型局域网系统",
+        'IT21"21世纪信息技术"系统',
+        "21世纪信息技术系统",
+    }
+
+    if raw_name in it21_aliases:
+        return "IT-21"
+
+    # S-3B 说明性文本统一
+    if raw_name in {
+        "S-3B（只执行水面侦查任务）",
+        "S-3B(只执行水面侦查任务)",
+    }:
+        return "S-3B"
+
+    if raw_name == "ES-3Av":
+        return "ES-3A"
+
+    return raw_name if allow_unknown else ""
+
+
+def split_entity_and_description(raw_name: str, entity_type: str = None, extra_names=None):
+    """
+    将 弹射器(C-13-1)、拦阻索(型号未知)、A-6E(退役) 拆成：
+    - 标准实体名
+    - 当前舰船上的说明信息
+
+    注意：
+    如果完整字符串本身能匹配词典实体，例如 AN/SPS-49(V)5，则不拆。
+    """
+    raw_name = kg_clean_name(raw_name)
+
+    if not raw_name or raw_name in {"未知", "无"}:
+        return "", "无"
+
+    # 先尝试完整匹配，避免误拆 AN/SPS-49(V)5 这种型号
+    full_match = canonicalize_entity_name(
+        raw_name,
+        entity_type=entity_type,
+        extra_names=extra_names,
+        allow_unknown=False
+    )
+
+    if full_match:
+        return full_match, "无"
+
+    # 再拆括号
+    m = re.match(r"^(.+?)[\(（](.+?)[\)）]$", raw_name)
+
+    if m:
+        base_name = kg_clean_name(m.group(1))
+        desc = kg_clean_name(m.group(2))
+
+        std_name = canonicalize_entity_name(
+            base_name,
+            entity_type=entity_type,
+            extra_names=extra_names,
+            allow_unknown=False
+        )
+
+        return std_name, desc
+
+    std_name = canonicalize_entity_name(
+        raw_name,
+        entity_type=entity_type,
+        extra_names=extra_names,
+        allow_unknown=False
+    )
+
+    return std_name, "无"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# --- LLM 调用限流器：强制串行请求，避免 SiliconFlow TPM 429 ---
+_LLM_SEMAPHORE = None
+
+def get_llm_semaphore():
+    global _LLM_SEMAPHORE
+    if _LLM_SEMAPHORE is None:
+        _LLM_SEMAPHORE = asyncio.Semaphore(1)
+    return _LLM_SEMAPHORE
+
+
+
+
 # --- 自定义大模型调用函数 ---
 async def siliconflow_llm_complete(
-    prompt, system_prompt=None, history_messages=[], **kwargs
+    prompt,
+    system_prompt=None,
+    history_messages=None,
+    **kwargs
 ) -> str:
-    client = AsyncOpenAI(api_key=API_KEY, base_url=BASE_URL)
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
+    """
+    SiliconFlow LLM 调用函数。
 
-    # 处理缓存
+    作用：
+    1. 支持 nano-graphrag 的 hashing_kv 缓存
+    2. 429 / TPM limit reached 时等待重试
+    3. APITimeoutError / ReadTimeout 时等待重试
+    4. 用 semaphore 强制串行请求，避免并发打爆 TPM
+    """
+    import random
+    import httpx
+    from openai import AsyncOpenAI, RateLimitError, APITimeoutError, APIConnectionError
+
+    if history_messages is None:
+        history_messages = []
+
+    # nano-graphrag 会传入 hashing_kv，这个不能传给 OpenAI API
     hashing_kv: BaseKVStorage = kwargs.pop("hashing_kv", None)
-    messages.extend(history_messages)
-    messages.append({"role": "user", "content": prompt})
 
+    messages = []
+
+    if system_prompt:
+        messages.append({
+            "role": "system",
+            "content": system_prompt
+        })
+
+    messages.extend(history_messages)
+
+    messages.append({
+        "role": "user",
+        "content": prompt
+    })
+
+    # 命中缓存则直接返回，减少 API 调用
     if hashing_kv is not None:
         args_hash = compute_args_hash(MODEL, messages)
         if_cache_return = await hashing_kv.get_by_id(args_hash)
         if if_cache_return is not None:
             return if_cache_return["return"]
+    else:
+        args_hash = None
 
-    response = await client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        temperature=0.1,  # 👈 只加这一行！
-        **kwargs
+    # 保证抽取稳定
+    kwargs.setdefault("temperature", 0.0)
+
+    # 避免把外部传入的重复参数搞冲突
+    kwargs.pop("model", None)
+    kwargs.pop("messages", None)
+
+    # 关闭 SDK 自带短间隔重试，改用我们自己的长等待重试
+    # read timeout 拉长，避免长输出时直接超时
+    client = AsyncOpenAI(
+        api_key=API_KEY,
+        base_url=BASE_URL,
+        max_retries=0,
+        timeout=httpx.Timeout(
+            connect=30.0,
+            read=600.0,
+            write=120.0,
+            pool=120.0
+        ),
     )
-    result = response.choices[0].message.content
 
-    if hashing_kv is not None:
-        await hashing_kv.upsert({args_hash: {"return": result, "model": MODEL}})
+    max_retries = 10
 
-    return result
+    for retry_idx in range(max_retries):
+        try:
+            async with get_llm_semaphore():
+                response = await client.chat.completions.create(
+                    model=MODEL,
+                    messages=messages,
+                    **kwargs
+                )
+
+            result = response.choices[0].message.content
+
+            if hashing_kv is not None and args_hash is not None:
+                await hashing_kv.upsert({
+                    args_hash: {
+                        "return": result,
+                        "model": MODEL
+                    }
+                })
+
+            return result
+
+        except RateLimitError:
+            wait_seconds = min(300, 30 * (retry_idx + 1)) + random.uniform(0, 8)
+            print(
+                f"[LLM限流] TPM limit reached，"
+                f"第 {retry_idx + 1}/{max_retries} 次重试，"
+                f"等待 {wait_seconds:.1f} 秒..."
+            )
+            await asyncio.sleep(wait_seconds)
+
+        except (APITimeoutError, APIConnectionError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+            wait_seconds = min(300, 20 * (retry_idx + 1)) + random.uniform(0, 8)
+            print(
+                f"[LLM超时/网络波动] {type(e).__name__}，"
+                f"第 {retry_idx + 1}/{max_retries} 次重试，"
+                f"等待 {wait_seconds:.1f} 秒..."
+            )
+            await asyncio.sleep(wait_seconds)
+
+        except Exception as e:
+            error_text = str(e)
+
+            if (
+                "429" in error_text
+                or "TPM limit" in error_text
+                or "rate limiting" in error_text.lower()
+                or "rate limit" in error_text.lower()
+                or "Too Many Requests" in error_text
+            ):
+                wait_seconds = min(300, 30 * (retry_idx + 1)) + random.uniform(0, 8)
+                print(
+                    f"[LLM限流] 捕获到限流异常，"
+                    f"第 {retry_idx + 1}/{max_retries} 次重试，"
+                    f"等待 {wait_seconds:.1f} 秒..."
+                )
+                await asyncio.sleep(wait_seconds)
+
+            elif (
+                "timeout" in error_text.lower()
+                or "timed out" in error_text.lower()
+                or "ReadTimeout" in error_text
+            ):
+                wait_seconds = min(300, 20 * (retry_idx + 1)) + random.uniform(0, 8)
+                print(
+                    f"[LLM超时] 捕获到超时异常，"
+                    f"第 {retry_idx + 1}/{max_retries} 次重试，"
+                    f"等待 {wait_seconds:.1f} 秒..."
+                )
+                await asyncio.sleep(wait_seconds)
+
+            else:
+                raise e
+
+    raise RuntimeError("LLM 调用多次重试后仍然失败：限流或超时")
 
 
 
@@ -118,15 +814,33 @@ async def siliconflow_llm_complete(
 def build_graph_rag(working_dir="./ship_index"):
     """
     统一创建 GraphRAG 对象。
-    修正 GraphML 后，需要重新调用该函数，让 GraphRAG 重新加载修正后的图结构。
+
+    注意：
+    1. best_model_max_async / cheap_model_max_async 控制内部并发
+    2. entity_extract_max_gleaning=0 关闭继续追问抽取，减少 LLM 请求
+    3. chunk_token_size 降低单次请求 token 压力
     """
     return GraphRAG(
         working_dir=working_dir,
+
         best_model_func=siliconflow_llm_complete,
         cheap_model_func=siliconflow_llm_complete,
+
         best_model_id=MODEL,
         cheap_model_id=MODEL,
+
         embedding_func=local_embedding,
+
+        # 降低 nano-graphrag 内部 LLM 并发
+        best_model_max_async=1,
+        cheap_model_max_async=1,
+
+        # 关闭 continue_prompt / gleaning，避免额外多轮抽取请求
+        entity_extract_max_gleaning=0,
+
+        # 降低每个 chunk 的 token 压力
+        chunk_token_size=700,
+        chunk_overlap_token_size=80,
     )
 
 
@@ -238,10 +952,60 @@ def normalize_graph_directions(working_dir: str, naval_data_path: str = "./naval
 
     known_rel_types = set(REL_SCHEMA.keys())
 
+    def merge_text(old_text, new_text):
+        old_text = str(old_text or "")
+        new_text = str(new_text or "")
+
+        if not new_text:
+            return old_text
+        if not old_text:
+            return new_text
+
+        parts = old_text.split("<SEP>")
+        if new_text in parts:
+            return old_text
+
+        return old_text + "<SEP>" + new_text
+
     node_attrs = {}
+    node_name_map = {}
+
     for n, data in G.nodes(data=True):
-        name = clean_name(n)
-        node_attrs[name] = dict(data)
+        raw_name = clean_name(n)
+        etype = clean_type(data.get("entity_type", "UNKNOWN"))
+
+        extra = valid_configurations if etype == "CONFIGURATION" else None
+
+        canonical_name = canonicalize_entity_name(
+            raw_name,
+            entity_type=etype,
+            extra_names=extra,
+            allow_unknown=False
+        )
+
+        if not canonical_name:
+            continue
+
+        node_name_map[raw_name] = canonical_name
+
+        fixed_data = dict(data)
+        fixed_data["entity_type"] = etype
+
+        # 对固定属性节点，不再拼接每艘舰不同的 description
+        if etype in SHIP_DEPENDENT_TYPES:
+            fixed_data["description"] = "固定属性节点"
+
+        if canonical_name not in node_attrs:
+            node_attrs[canonical_name] = fixed_data
+        else:
+            node_attrs[canonical_name]["description"] = merge_text(
+                node_attrs[canonical_name].get("description", ""),
+                fixed_data.get("description", "")
+            )
+            node_attrs[canonical_name]["source_id"] = merge_text(
+                node_attrs[canonical_name].get("source_id", ""),
+                fixed_data.get("source_id", "")
+            )
 
     def get_node_type(name):
         name = clean_name(name)
@@ -266,9 +1030,38 @@ def normalize_graph_directions(working_dir: str, naval_data_path: str = "./naval
         if etype == "CONFIGURATION" and valid_configurations:
             return name in valid_configurations
 
-        # 你当前设计中 Shipyard 固定为“建造船厂”
-        if etype == "SHIPYARD":
-            return name == "建造船厂"
+        # 你当前设计中 纯文本实体名 固定
+        fixed_name_by_type = {
+            "BOW": {"船首"},
+            "STERN": {"船尾"},
+            "DECK": {"甲板"},
+            "ISLAND": {"舰岛"},
+            "MAST": {"桅杆"},
+            "LENGTH_OVERALL": {"舰总长"},
+            "BEAM": {"舷宽"},
+            "FLIGHT_DECK_WIDTH": {"飞行甲板宽"},
+            "DRAFT": {"吃水深度"},
+            "STANDARD_DISPLACEMENT": {"标准排水量"},
+            "FULL_LOAD_DISPLACEMENT": {"满载排水量"},
+            "SPEED": {"航速"},
+            "RANGE": {"续航力"},
+            "CREW": {"舰员编制"},
+            "AIRCRAFT_CAPACITY": {"舰载机数量"},
+            "POWER_OUTPUT": {"推进功率"},
+            "PROPULSION": {"推进装置"},
+            "FLIGHT_DECK_AREA": {"飞行甲板面积"},
+            "ISLAND_POSITION": {"舰岛位置"},
+            "HOMEPORT": {"母港"},
+            "CATAPULT": {"弹射器"},
+            "ARRESTING_GEAR": {"拦阻索", "拦阻网"},
+            "SHIPYARD": {"建造船厂"},
+            "SERVICE_STATUS": {"服役状态"},
+        }
+
+        if etype in fixed_name_by_type:
+            return name in fixed_name_by_type[etype]
+
+        return True
 
         return True
 
@@ -341,8 +1134,15 @@ def normalize_graph_directions(working_dir: str, naval_data_path: str = "./naval
         edge_iter = G.edges(data=True)
 
     for src, tgt, edge_data in edge_iter:
-        src = clean_name(src)
-        tgt = clean_name(tgt)
+        raw_src = clean_name(src)
+        raw_tgt = clean_name(tgt)
+
+        src = node_name_map.get(raw_src)
+        tgt = node_name_map.get(raw_tgt)
+
+        if not src or not tgt:
+            dropped += 1
+            continue
 
         if src not in DG.nodes or tgt not in DG.nodes:
             dropped += 1
@@ -390,52 +1190,52 @@ def repair_graph_from_naval_data(working_dir: str, naval_data_path: str = "./nav
     graphml_file = os.path.join(working_dir, "graph_chunk_entity_relation.graphml")
 
     if not os.path.exists(graphml_file):
-        print(f"[补边] GraphML 文件不存在: {graphml_file}")
-        return
+        print(f"[规则构图] GraphML 不存在，将从 naval_data 直接创建新图: {graphml_file}")
+        os.makedirs(working_dir, exist_ok=True)
+        G = nx.DiGraph()
+        backup_file = None
+    else:
+        backup_file = graphml_file + ".bak_before_repair"
+        if not os.path.exists(backup_file):
+            shutil.copy2(graphml_file, backup_file)
+
+        G = nx.read_graphml(graphml_file)
 
     if not os.path.exists(naval_data_path):
         print(f"[补边] naval_data 文件不存在: {naval_data_path}")
         return
 
-    backup_file = graphml_file + ".bak_before_repair"
-    if not os.path.exists(backup_file):
-        shutil.copy2(graphml_file, backup_file)
-
-    G = nx.read_graphml(graphml_file)
 
     with open(naval_data_path, "r", encoding="utf-8") as f:
         text = f.read()
 
     def clean_name(s):
-        return str(s).strip().strip('"')
+        return kg_clean_name(s)
 
     def canonical_entity_type(entity_type: str) -> str:
-        """
-        统一实体类型大小写，避免出现 AIRCRAFT / Aircraft 这种重复分组。
-        """
-        return str(entity_type or "UNKNOWN").strip().strip('"').upper()
+        return kg_entity_type(entity_type)
 
-    def normalize_equipment_name(name):
-        name = clean_name(name)
+    # 提前收集动态 Configuration 名称
+    valid_configurations = set()
 
-        if not name:
-            return ""
+    config_section_matches = re.finditer(
+        r"\[CONFIGURATION\](.*?)(?=\[/SHIP\])",
+        text,
+        flags=re.S
+    )
 
-        name = name.replace("(退役)", "").replace("（退役）", "").strip()
+    for cm in config_section_matches:
+        config_text_for_names = cm.group(1)
+        for hm in re.finditer(r"^(CVN-\d+\s+[^\n:：]+)[：:]\s*$", config_text_for_names, flags=re.M):
+            valid_configurations.add(clean_name(hm.group(1)))
 
-        if name.startswith("弹射器"):
-            return "弹射器"
-        if name.startswith("拦阻索"):
-            return "拦阻索"
-        if name.startswith("拦阻网"):
-            return "拦阻网"
-
-        name = name.replace("勃朗宁 M2 重机枪", "勃朗宁 M2")
-
-        name = re.sub(r"\bMk\b", "MK", name)
-        name = re.sub(r"\bmk\b", "MK", name)
-
-        return name.strip()
+    def normalize_equipment_name(name, entity_type=None):
+        entity_name, _ = split_entity_and_description(
+            name,
+            entity_type=entity_type,
+            extra_names=valid_configurations
+        )
+        return entity_name
 
     def append_desc(old_desc, new_desc):
         old_desc = str(old_desc or "")
@@ -453,32 +1253,47 @@ def repair_graph_from_naval_data(working_dir: str, naval_data_path: str = "./nav
         return old_desc + "<SEP>" + new_desc
 
     def add_node_if_missing(name, entity_type, description="无"):
-        name = clean_name(name)
         entity_type = canonical_entity_type(entity_type)
+
+        extra = valid_configurations if entity_type == "CONFIGURATION" else None
+
+        name = canonicalize_entity_name(
+            name,
+            entity_type=entity_type,
+            extra_names=extra,
+            allow_unknown=False
+        )
 
         if not name or name == "未知" or name == "无":
             return
+
+        if entity_type in SHIP_DEPENDENT_TYPES:
+            node_desc = "固定属性节点"
+        else:
+            node_desc = description
 
         if name not in G:
             G.add_node(
                 name,
                 entity_type=entity_type,
-                description=description,
+                description=node_desc,
                 source_id="naval_data_repair"
             )
         else:
             old_type = str(G.nodes[name].get("entity_type", "")).strip().strip('"')
 
-            # 统一已有节点的实体类型大小写
             if not old_type or old_type.upper() == "UNKNOWN":
                 G.nodes[name]["entity_type"] = entity_type
             else:
-                G.nodes[name]["entity_type"] = old_type.upper()
+                G.nodes[name]["entity_type"] = kg_entity_type(old_type)
 
-            G.nodes[name]["description"] = append_desc(
-                G.nodes[name].get("description", ""),
-                description
-            )
+            if entity_type in SHIP_DEPENDENT_TYPES:
+                G.nodes[name]["description"] = "固定属性节点"
+            else:
+                G.nodes[name]["description"] = append_desc(
+                    G.nodes[name].get("description", ""),
+                    node_desc
+                )
 
     def add_edge_if_missing(src, tgt, relation_type, description=""):
         src = clean_name(src)
@@ -715,23 +1530,32 @@ def repair_graph_from_naval_data(working_dir: str, naval_data_path: str = "./nav
                 added_edges += 1
 
                 for line in items_text.splitlines():
-                    item = clean_name(line)
+                    raw_item = clean_name(line)
 
-                    if not item or item.startswith("#") or item in {"未知", "无"}:
+                    if not raw_item or raw_item.startswith("#") or raw_item in {"未知", "无"}:
                         continue
 
-                    item = normalize_equipment_name(item)
+                    item, item_desc = split_entity_and_description(
+                        raw_item,
+                        entity_type=equipment_entity_type,
+                        extra_names=valid_configurations
+                    )
 
                     if not item or item in {"未知", "无"}:
                         continue
 
                     add_node_if_missing(item, equipment_entity_type)
 
+                    edge_desc = f"{relation_type}，{item} 属于 {config_name}"
+
+                    if item_desc and item_desc != "无":
+                        edge_desc += f"，说明：{item_desc}"
+
                     add_edge_if_missing(
                         item,
                         config_name,
                         relation_type,
-                        f"{relation_type}，{item} 属于 {config_name}"
+                        edge_desc
                     )
                     added_edges += 1
 
@@ -748,18 +1572,27 @@ def repair_graph_from_naval_data(working_dir: str, naval_data_path: str = "./nav
                 add_node_if_missing(function_name, function_type)
 
                 for equip in split_items(equipment_list_text):
-                    equip = normalize_equipment_name(equip)
+                    equip, equip_desc = split_entity_and_description(
+                        equip,
+                        entity_type=equipment_type,
+                        extra_names=valid_configurations
+                    )
 
                     if not equip or equip in {"未知", "无"}:
                         continue
 
                     add_node_if_missing(equip, equipment_type)
 
+                    edge_desc = f"{rel_type}，{equip} 具备功能 {function_name}"
+
+                    if equip_desc and equip_desc != "无":
+                        edge_desc += f"，说明：{equip_desc}"
+
                     add_edge_if_missing(
                         equip,
                         function_name,
                         rel_type,
-                        f"{rel_type}，{equip} 具备功能 {function_name}"
+                        edge_desc
                     )
                     added_edges += 1
 
@@ -767,7 +1600,10 @@ def repair_graph_from_naval_data(working_dir: str, naval_data_path: str = "./nav
 
     print(f"[补边完成] 根据 naval_data 尝试补全/修正 {added_edges} 条确定性关系")
     print(f"[补边完成] 已写回真实 GraphML: {graphml_file}")
-    print(f"[补边完成] 原始备份: {backup_file}")
+    if backup_file:
+        print(f"[补边完成] 原始备份: {backup_file}")
+    else:
+        print("[规则构图完成] 本次为从 0 创建图谱，无原始备份")
 
 
 # ==================== 图谱修复结果检查 ====================
@@ -999,6 +1835,374 @@ async def direct_text_parse(user_text: str) -> str:
 
 
 
+
+
+
+
+
+# ==================== GraphML 精确匹配函数 ====================
+def normalize_observed_equipment_name(item: str, entity_type: str) -> str:
+    """
+    将用户输入解析出的装备名标准化为图谱实体名。
+    例如：
+    勃朗宁 M2 重机枪 -> 勃朗宁 M2
+    """
+    item = kg_clean_name(item)
+
+    if not item or item in {"未知", "无"}:
+        return ""
+
+    # 先直接走词典标准化
+    std = canonicalize_entity_name(
+        item,
+        entity_type=entity_type,
+        allow_unknown=False
+    )
+
+    if std:
+        return std
+
+    # 处理常见口语/功能后缀
+    alias_rules = {
+        "勃朗宁 M2 重机枪": "勃朗宁 M2",
+        "M2 重机枪": "勃朗宁 M2",
+        "M2机枪": "勃朗宁 M2",
+        "勃朗宁M2": "勃朗宁 M2",
+        "Mk38": "Mk 38",
+        "Mk 38 机炮": "Mk 38",
+        "MK38": "Mk 38",
+    }
+
+    if item in alias_rules:
+        return alias_rules[item]
+
+    # 再尝试去掉部分中文描述词
+    cleaned = (
+        item.replace("重机枪", "")
+            .replace("机枪", "")
+            .replace("舰炮", "")
+            .replace("火炮", "")
+            .replace("系统", "")
+            .strip()
+    )
+
+    std = canonicalize_entity_name(
+        cleaned,
+        entity_type=entity_type,
+        allow_unknown=False
+    )
+
+    if std:
+        return std
+
+    return ""
+
+
+def get_edge_relation_type(edge_data: dict) -> str:
+    """
+    读取边的 relation_type。
+    """
+    rel = str(edge_data.get("relation_type", "")).strip().strip('"')
+
+    if rel:
+        return rel.split("<SEP>")[0].strip()
+
+    desc = str(edge_data.get("description", "")).strip().strip('"')
+    if "，" in desc:
+        return desc.split("，")[0].strip()
+
+    if "," in desc:
+        return desc.split(",")[0].strip()
+
+    return ""
+
+
+def get_ship_from_configuration(G, config_name: str):
+    """
+    根据 Configuration 节点反查属于哪艘舰。
+    路径：
+    Ship_Instance → Configuration
+    relation_type = EQUIPPED_WITH
+    """
+    for src, tgt, data in G.in_edges(config_name, data=True):
+        rel = get_edge_relation_type(data)
+        src_type = str(G.nodes[src].get("entity_type", "")).upper()
+
+        if rel == "EQUIPPED_WITH" and src_type == "SHIP_INSTANCE":
+            return src
+
+    return ""
+
+
+def match_candidates_precise(working_dir: str, observed_attrs_json: str) -> str:
+    """
+    直接读取 GraphML 做精确匹配。
+    不再依赖 graph_func.aquery，不再让 LLM 判断候选舰船。
+    """
+    import os
+    import json
+    import networkx as nx
+    from collections import defaultdict
+
+    graphml_file = os.path.join(working_dir, "graph_chunk_entity_relation.graphml")
+
+    if not os.path.exists(graphml_file):
+        return json.dumps({
+            "matched_candidates": [],
+            "match_level": "no_match",
+            "suggestion": f"GraphML 文件不存在: {graphml_file}"
+        }, ensure_ascii=False, indent=2)
+
+    G = nx.read_graphml(graphml_file)
+    observed = json.loads(observed_attrs_json)
+
+    equipment = observed.get("equipment_mentioned", {})
+    visual = observed.get("visual", {})
+    non_visual = observed.get("non_visual", {})
+
+    equipment_schema = {
+        "Radar_System": ("RADAR_SYSTEM", "RADAR_OF"),
+        "Countermeasure_System": ("COUNTERMEASURE_SYSTEM", "COUNTERMEASURE_OF"),
+        "Combat_System": ("COMBAT_SYSTEM", "COMBAT_SYSTEM_OF"),
+        "Weapon_System": ("WEAPON_SYSTEM", "WEAPON_OF"),
+        "Shipboard_Gun": ("SHIPBOARD_GUN", "GUN_OF"),
+        "Aircraft": ("AIRCRAFT", "AIRCRAFT_OF"),
+        "Powerplant": ("POWERPLANT", "POWERPLANT_OF"),
+    }
+
+    visual_schema = {
+        "Bow_Feature": ("船首", "BOW_OF"),
+        "Stern_Feature": ("船尾", "STERN_OF"),
+        "Island_Feature": ("舰岛", "ISLAND_OF"),
+        "Deck_Feature": ("甲板", "DECK_OF"),
+        "Mast_Feature": ("桅杆", "MAST_OF"),
+    }
+
+    non_visual_schema = {
+        "Length_Overall": ("舰总长", "LENGTH_OVERALL_OF"),
+        "Beam": ("舷宽", "BEAM_OF"),
+        "Flight_Deck_Width": ("飞行甲板宽", "FLIGHT_DECK_WIDTH_OF"),
+        "Draft": ("吃水深度", "DRAFT_OF"),
+        "Standard_Displacement": ("标准排水量", "STANDARD_DISPLACEMENT_OF"),
+        "Full_Load_Displacement": ("满载排水量", "FULL_LOAD_DISPLACEMENT_OF"),
+        "Speed": ("航速", "SPEED_OF"),
+        "Range": ("续航力", "RANGE_OF"),
+        "Crew": ("舰员编制", "CREW_OF"),
+        "Aircraft_Capacity": ("舰载机数量", "AIRCRAFT_CAPACITY_OF"),
+        "Power_Output": ("推进功率", "POWER_OUTPUT_OF"),
+        "Propulsion": ("推进装置", "PROPULSION_OF"),
+        "Flight_Deck_Area": ("飞行甲板面积", "FLIGHT_DECK_AREA_OF"),
+        "Island_Position": ("舰岛位置", "ISLAND_POSITION_OF"),
+    }
+
+    ship_scores = defaultdict(float)
+    ship_evidence = defaultdict(list)
+    unmatched_conditions = []
+
+    total_conditions = 0
+
+    # ==================== 1. 装备精确匹配 ====================
+    for input_type, items in equipment.items():
+        if not items:
+            continue
+
+        if input_type not in equipment_schema:
+            continue
+
+        entity_type, rel_type = equipment_schema[input_type]
+
+        for raw_item in items:
+            total_conditions += 1
+
+            item = normalize_observed_equipment_name(raw_item, entity_type)
+
+            if not item:
+                unmatched_conditions.append({
+                    "type": input_type,
+                    "raw_value": raw_item,
+                    "reason": "无法映射到图谱标准实体"
+                })
+                continue
+
+            if item not in G.nodes:
+                unmatched_conditions.append({
+                    "type": input_type,
+                    "raw_value": raw_item,
+                    "normalized": item,
+                    "reason": "图谱中不存在该实体"
+                })
+                continue
+
+            matched_any = False
+
+            for _, config_name, edge_data in G.out_edges(item, data=True):
+                edge_rel = get_edge_relation_type(edge_data)
+
+                if edge_rel != rel_type:
+                    continue
+
+                ship = get_ship_from_configuration(G, config_name)
+
+                if not ship:
+                    continue
+
+                matched_any = True
+                ship_scores[ship] += 1.0
+                ship_evidence[ship].append({
+                    "condition_type": input_type,
+                    "input_value": raw_item,
+                    "matched_entity": item,
+                    "matched_path": f"{item} → {config_name} ← {ship}",
+                    "relation_type": rel_type
+                })
+
+            if not matched_any:
+                unmatched_conditions.append({
+                    "type": input_type,
+                    "raw_value": raw_item,
+                    "normalized": item,
+                    "reason": "图谱中没有找到该装备连接到任何舰船配置"
+                })
+
+    # ==================== 2. 视觉属性匹配 ====================
+    for key, value in visual.items():
+        if not value or value in {"未知", "不确定"}:
+            continue
+
+        if key not in visual_schema:
+            continue
+
+        total_conditions += 1
+
+        fixed_node, rel_type = visual_schema[key]
+
+        if fixed_node not in G.nodes:
+            continue
+
+        matched_any = False
+
+        for _, ship, edge_data in G.out_edges(fixed_node, data=True):
+            edge_rel = get_edge_relation_type(edge_data)
+            desc = str(edge_data.get("description", ""))
+
+            if edge_rel == rel_type and value in desc:
+                matched_any = True
+                ship_scores[ship] += 0.5
+                ship_evidence[ship].append({
+                    "condition_type": key,
+                    "input_value": value,
+                    "matched_entity": fixed_node,
+                    "matched_path": f"{fixed_node} → {ship}",
+                    "relation_type": rel_type
+                })
+
+        if not matched_any:
+            unmatched_conditions.append({
+                "type": key,
+                "raw_value": value,
+                "reason": "未在边 description 中匹配到该视觉属性值"
+            })
+
+    # ==================== 3. 非视觉属性匹配 ====================
+    for key, value in non_visual.items():
+        if not value or value == "未知":
+            continue
+
+        if key not in non_visual_schema:
+            continue
+
+        total_conditions += 1
+
+        fixed_node, rel_type = non_visual_schema[key]
+
+        if fixed_node not in G.nodes:
+            continue
+
+        matched_any = False
+
+        for _, ship, edge_data in G.out_edges(fixed_node, data=True):
+            edge_rel = get_edge_relation_type(edge_data)
+            desc = str(edge_data.get("description", ""))
+
+            if edge_rel == rel_type and value in desc:
+                matched_any = True
+                ship_scores[ship] += 0.5
+                ship_evidence[ship].append({
+                    "condition_type": key,
+                    "input_value": value,
+                    "matched_entity": fixed_node,
+                    "matched_path": f"{fixed_node} → {ship}",
+                    "relation_type": rel_type
+                })
+
+        if not matched_any:
+            unmatched_conditions.append({
+                "type": key,
+                "raw_value": value,
+                "reason": "未在边 description 中匹配到该属性值"
+            })
+
+    # ==================== 4. 输出结果 ====================
+    if not ship_scores:
+        return json.dumps({
+            "matched_candidates": [],
+            "match_level": "no_match",
+            "unmatched_conditions": unmatched_conditions,
+            "suggestion": "图谱中未找到满足输入条件的舰船。建议检查用户输入是否包含词典外实体，或转入图像识别流程。"
+        }, ensure_ascii=False, indent=2)
+
+    max_score = max(ship_scores.values())
+
+    candidates = []
+
+    for ship, score in sorted(ship_scores.items(), key=lambda x: x[1], reverse=True):
+        confidence = score / max(total_conditions, 1)
+
+        candidates.append({
+            "hull_number": ship,
+            "confidence": round(confidence, 4),
+            "score": score,
+            "matched_evidence": ship_evidence[ship]
+        })
+
+    if max_score >= 1.0:
+        match_level = "high_confidence"
+    elif max_score >= 0.5:
+        match_level = "low_confidence"
+    else:
+        match_level = "very_low_confidence"
+
+    result = {
+        "matched_candidates": candidates,
+        "match_level": match_level,
+        "unmatched_conditions": unmatched_conditions,
+        "suggestion": "该结果由 GraphML 精确路径匹配生成，未依赖 LLM 推断。"
+    }
+
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ==================== 图谱匹配（含置信度分层） ====================
 async def match_candidates(graph_func, observed_attrs_json: str) -> str:
     """
@@ -1131,48 +2335,80 @@ async def main():
     WORKING_DIR = "./ship_index"
     NAVAL_DATA_PATH = "./naval_data.txt"
 
-    # 第一次测试建议 True：删除旧索引，避免旧错误边和缓存影响新结果
-    # 后续如果你不想每次重建，可以改成 False
+    # True  = naval_data 用 Python 规则构图，不调用 LLM，不走 ainsert
+    # False = 旧模式：仍然走 nano-graphrag 的 ainsert
+    USE_RULE_BASE_GRAPH = True
+
+    # naval_data 改了，就设 True 重新构图
+    # 图谱稳定后，只测试解析/匹配时改成 False
     REBUILD_INDEX = True
-
-    if REBUILD_INDEX and os.path.exists(WORKING_DIR):
-        import shutil
-        print(f"[重建索引] 删除旧索引目录: {WORKING_DIR}")
-        shutil.rmtree(WORKING_DIR)
-
-    # 1. 创建 GraphRAG 对象
-    graph_func = build_graph_rag(WORKING_DIR)
 
     graphml_file = os.path.join(WORKING_DIR, "graph_chunk_entity_relation.graphml")
 
-    # 2. 插入 naval_data，让 nano-graphrag 生成初始图结构
-    # 如果已经有图谱且不重建，就跳过 ainsert，避免重复调用 LLM
-    if REBUILD_INDEX or not os.path.exists(graphml_file):
-        with open(NAVAL_DATA_PATH, "r", encoding="utf-8") as f:
-            await graph_func.ainsert(f.read())
+    if USE_RULE_BASE_GRAPH:
+        # ==================== 规则构图模式 ====================
+        # 这个模式用于你的半结构化 naval_data
+        # 不调用 LLM，不走 graph_func.ainsert()
+
+        if REBUILD_INDEX and os.path.exists(WORKING_DIR):
+            import shutil
+            print(f"[重建规则图谱] 删除旧索引目录: {WORKING_DIR}")
+            shutil.rmtree(WORKING_DIR)
+
+        if REBUILD_INDEX or not os.path.exists(graphml_file):
+            print("[规则构图] 使用 naval_data 直接构建基础知识图谱")
+
+            # 1. 从 naval_data 直接生成 GraphML
+            repair_graph_from_naval_data(WORKING_DIR, NAVAL_DATA_PATH)
+
+            # 2. 对规则构图结果做一次 schema 校验和方向规范化
+            normalize_graph_directions(WORKING_DIR, NAVAL_DATA_PATH)
+
+        else:
+            print(f"[跳过规则构图] 已存在 GraphML，直接使用现有图谱: {graphml_file}")
+
     else:
-        print(f"[跳过建图] 已存在 GraphML，直接使用现有图谱: {graphml_file}")
+        # ==================== nano-graphrag 抽图模式 ====================
+        # 这个模式保留给以后：
+        # 1. 你想重新测试 nano-graphrag 对 naval_data 的自动抽图能力
+        # 2. 或者未来处理非结构化文本资料时，另行改造成 patch_graph 流程
 
-    # 3. 第一次方向修正：修正 LLM 抽取产生的反向边，删除明显非法边
-    normalize_graph_directions(graph_func.working_dir, NAVAL_DATA_PATH)
+        graph_func = build_graph_rag(WORKING_DIR)
 
-    # 4. 根据 naval_data 的标准结构强制补全确定性关系
-    repair_graph_from_naval_data(graph_func.working_dir, NAVAL_DATA_PATH)
+        if REBUILD_INDEX or not os.path.exists(graphml_file):
+            try:
+                with open(NAVAL_DATA_PATH, "r", encoding="utf-8") as f:
+                    await graph_func.ainsert(f.read())
 
-    # 5. 第二次方向修正：确保补边后整体仍符合 schema
-    normalize_graph_directions(graph_func.working_dir, NAVAL_DATA_PATH)
+            except Exception as e:
+                print(f"[建图失败] ainsert 阶段失败：{type(e).__name__}: {e}")
 
-    # 6. 关键：重新加载 GraphRAG，让后续 aquery 使用修正后的 GraphML
+                if os.path.exists(WORKING_DIR):
+                    import shutil
+                    print(f"[建图失败] 删除不完整索引目录: {WORKING_DIR}")
+                    shutil.rmtree(WORKING_DIR)
+
+                raise e
+        else:
+            print(f"[跳过建图] 已存在 GraphML，直接使用现有图谱: {graphml_file}")
+
+        # nano-graphrag 抽图后，才需要走这一套：
+        # 第一次修方向 → 根据 naval_data 补全 → 第二次修方向
+        normalize_graph_directions(WORKING_DIR, NAVAL_DATA_PATH)
+        repair_graph_from_naval_data(WORKING_DIR, NAVAL_DATA_PATH)
+        normalize_graph_directions(WORKING_DIR, NAVAL_DATA_PATH)
+
+    # ==================== 重新加载 GraphRAG ====================
+    # 无论规则构图还是 nano-graphrag 抽图，最后都重新加载当前 GraphML
     graph_func = build_graph_rag(WORKING_DIR)
 
-    # 7. 检查关键边是不是真的写入 GraphML
+    # ==================== 检查和打印 ====================
     sanity_check_graph(graph_func.working_dir)
-
-    # ========== 打印实体和关系（用于调试） ==========
     print_entities_and_relations(graph_func.working_dir)
 
     # ========== 测试用例 ==========
     user_text = "一艘很大的航母，装备勃朗宁 M2 重机枪"
+
     print("=" * 60)
     print("【步骤1】纯文本解析结果：")
     parse_result = await direct_text_parse(user_text)
@@ -1197,7 +2433,7 @@ async def main():
 
     print("\n" + "=" * 60)
     print("【步骤2】图谱匹配结果：")
-    match_result = await match_candidates(graph_func, observed_json)
+    match_result = match_candidates_precise(graph_func.working_dir, observed_json)
     print(match_result)
 
 

@@ -214,13 +214,13 @@ ACDS
 NTDS
 SSDS Mk 2
 MK-23 TAS
-JMCIS
 
 CVN-68 通信套件:
 SRR-1
 WSC-3
 WSC-6
 USC-38
+JMCIS
 
 CVN-68 数据链套件:
 LINK-4A
@@ -1533,7 +1533,7 @@ F/A-18
 F-14(退役)
 EA-6B
 E-2C
-S-3B（只执行水面侦查任务）
+S-3B
 ES-3A(退役)
 SH-60
 
@@ -1606,7 +1606,7 @@ F/A-18
 F-14(退役)
 EA-6B
 E-2C
-S-3B（只执行水面侦查任务）
+S-3B
 ES-3A(退役)
 SH-60
 
@@ -1739,7 +1739,7 @@ IT21
 卫星通信：未知
 战术环境支援：未知
 航母情报：未知
-指挥信息系统：IT21"21世纪信息技术"系统
+指挥信息系统：IT21
 联合战术系统：未知
 
 [DATA_LINK]
@@ -1877,7 +1877,7 @@ CVN-74 装甲防护套件:
 
 
 
-
+【CVN-75 哈里·S·杜鲁门号】
 [SHIP]
 
 Ship_Instance: CVN-75 哈里·S·杜鲁门号
@@ -1969,13 +1969,13 @@ MK23 TAS
 信息指挥：未知
 
 [COMMUNICATION_SYSTEM]
-IT‑21 非保密型局域网系统
+IT‑21
 
 [COMMUNICATION_FUNCTION]
 卫星通信：未知
 战术环境支援：未知
 航母情报：未知
-指挥信息系统：IT‑21 非保密型局域网系统
+指挥信息系统：IT‑21
 联合战术系统：未知
 
 [DATA_LINK]
@@ -2072,7 +2072,7 @@ ACDS Block 0/1
 MK23 TAS
 
 CVN-75 通信套件:
-IT‑21 非保密型局域网系统
+IT‑21
 
 CVN-75 数据链套件:
 未知

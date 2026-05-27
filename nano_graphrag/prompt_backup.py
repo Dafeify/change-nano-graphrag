@@ -62,229 +62,225 @@ Output: """
 
 PROMPTS[
     "community_report"
-] = """You are an AI assistant that helps a human analyst to perform general information discovery. 
-Information discovery is the process of identifying and assessing relevant information associated with certain entities (e.g., organizations and individuals) within a network.
+] = """你是一个军舰知识分析专家。请根据提供的实体和关系，生成一个型号属性映射表。
 
-# Goal
-Write a comprehensive report of a community, given a list of entities that belong to the community as well as their relationships and optional associated claims. The report will be used to inform decision-makers about information associated with the community and their potential impact. The content of this report includes an overview of the community's key entities, their legal compliance, technical capabilities, reputation, and noteworthy claims.
+映射表应以**特征组合**为索引，每个组合下列出满足该组合的候选舷号（Ship_Instance）。
 
-# Report Structure
-
-The report should include the following sections:
-
-- TITLE: community's name that represents its key entities - title should be short but specific. When possible, include representative named entities in the title.
-- SUMMARY: An executive summary of the community's overall structure, how its entities are related to each other, and significant information associated with its entities.
-- IMPACT SEVERITY RATING: a float score between 0-10 that represents the severity of IMPACT posed by entities within the community.  IMPACT is the scored importance of a community.
-- RATING EXPLANATION: Give a single sentence explanation of the IMPACT severity rating.
-- DETAILED FINDINGS: A list of 5-10 key insights about the community. Each insight should have a short summary followed by multiple paragraphs of explanatory text grounded according to the grounding rules below. Be comprehensive.
-
-Return output as a well-formed JSON-formatted string with the following format:
-    {{
-        "title": <report_title>,
-        "summary": <executive_summary>,
-        "rating": <impact_severity_rating>,
-        "rating_explanation": <rating_explanation>,
-        "findings": [
-            {{
-                "summary":<insight_1_summary>,
-                "explanation": <insight_1_explanation>
-            }},
-            {{
-                "summary":<insight_2_summary>,
-                "explanation": <insight_2_explanation>
-            }}
-            ...
-        ]
-    }}
-
-# Grounding Rules
-Do not include information where the supporting evidence for it is not provided.
-
-
-# Example Input
------------
-Text:
-```
-Entities:
-```csv
-id,entity,type,description
-5,VERDANT OASIS PLAZA,geo,Verdant Oasis Plaza is the location of the Unity March
-6,HARMONY ASSEMBLY,organization,Harmony Assembly is an organization that is holding a march at Verdant Oasis Plaza
-```
-Relationships:
-```csv
-id,source,target,description
-37,VERDANT OASIS PLAZA,UNITY MARCH,Verdant Oasis Plaza is the location of the Unity March
-38,VERDANT OASIS PLAZA,HARMONY ASSEMBLY,Harmony Assembly is holding a march at Verdant Oasis Plaza
-39,VERDANT OASIS PLAZA,UNITY MARCH,The Unity March is taking place at Verdant Oasis Plaza
-40,VERDANT OASIS PLAZA,TRIBUNE SPOTLIGHT,Tribune Spotlight is reporting on the Unity march taking place at Verdant Oasis Plaza
-41,VERDANT OASIS PLAZA,BAILEY ASADI,Bailey Asadi is speaking at Verdant Oasis Plaza about the march
-43,HARMONY ASSEMBLY,UNITY MARCH,Harmony Assembly is organizing the Unity March
-```
-```
-Output:
+示例格式：
 {{
-    "title": "Verdant Oasis Plaza and Unity March",
-    "summary": "The community revolves around the Verdant Oasis Plaza, which is the location of the Unity March. The plaza has relationships with the Harmony Assembly, Unity March, and Tribune Spotlight, all of which are associated with the march event.",
-    "rating": 5.0,
-    "rating_explanation": "The impact severity rating is moderate due to the potential for unrest or conflict during the Unity March.",
-    "findings": [
-        {{
-            "summary": "Verdant Oasis Plaza as the central location",
-            "explanation": "Verdant Oasis Plaza is the central entity in this community, serving as the location for the Unity March. This plaza is the common link between all other entities, suggesting its significance in the community. The plaza's association with the march could potentially lead to issues such as public disorder or conflict, depending on the nature of the march and the reactions it provokes."
-        }},
-        {{
-            "summary": "Harmony Assembly's role in the community",
-            "explanation": "Harmony Assembly is another key entity in this community, being the organizer of the march at Verdant Oasis Plaza. The nature of Harmony Assembly and its march could be a potential source of threat, depending on their objectives and the reactions they provoke. The relationship between Harmony Assembly and the plaza is crucial in understanding the dynamics of this community."
-        }},
-        {{
-            "summary": "Unity March as a significant event",
-            "explanation": "The Unity March is a significant event taking place at Verdant Oasis Plaza. This event is a key factor in the community's dynamics and could be a potential source of threat, depending on the nature of the march and the reactions it provokes. The relationship between the march and the plaza is crucial in understanding the dynamics of this community."
-        }},
-        {{
-            "summary": "Role of Tribune Spotlight",
-            "explanation": "Tribune Spotlight is reporting on the Unity March taking place in Verdant Oasis Plaza. This suggests that the event has attracted media attention, which could amplify its impact on the community. The role of Tribune Spotlight could be significant in shaping public perception of the event and the entities involved."
-        }}
-    ]
+  "特征组合": [
+    {{
+      "条件": {{"雷达": "AN/SPY-6", "近防系统": "Phalanx Block 1B", "舰岛层数": "3"}},
+      "候选舷号": ["CVN-72", "CVN-73"]
+    }},
+    {{
+      "条件": {{"雷达": "AN/SPY-6", "近防系统": "SeaRAM", "舰岛层数": "4"}},
+      "候选舷号": ["CVN-76", "CVN-77"]
+    }}
+  ]
 }}
 
+关键要求：
+1. 特征组合中的条件应使用实体类型的中文简称：雷达(Radar_System)、对抗系统(Countermeasure_System)、指挥作战(Combat_System)、武器装备(Weapon_System)、舰载火炮(Shipboard_Gun)、动力装置(Powerplant)、舰载飞机(Aircraft)、舰首(Bow)、舰尾(Stern)、舰岛(Island)、甲板(Deck)、桅杆(Mast)。
+2. 每个特征组合的候选舷号必须是从社区实体中真实存在的 Ship_Instance。
+3. 只输出 JSON，不要包含其他解释文字。
 
-# Real Data
-
-Use the following text for your answer. Do not make anything up in your answer.
-
+使用以下文本生成映射表：
 Text:
 ```
 {input_text}
 ```
 
-The report should include the following sections:
+Output:
+"""
 
-- TITLE: community's name that represents its key entities - title should be short but specific. When possible, include representative named entities in the title.
-- SUMMARY: An executive summary of the community's overall structure, how its entities are related to each other, and significant information associated with its entities.
-- IMPACT SEVERITY RATING: a float score between 0-10 that represents the severity of IMPACT posed by entities within the community.  IMPACT is the scored importance of a community.
-- RATING EXPLANATION: Give a single sentence explanation of the IMPACT severity rating.
-- DETAILED FINDINGS: A list of 5-10 key insights about the community. Each insight should have a short summary followed by multiple paragraphs of explanatory text grounded according to the grounding rules below. Be comprehensive.
 
-Return output as a well-formed JSON-formatted string with the following format:
-    {{
-        "title": <report_title>,
-        "summary": <executive_summary>,
-        "rating": <impact_severity_rating>,
-        "rating_explanation": <rating_explanation>,
-        "findings": [
-            {{
-                "summary":<insight_1_summary>,
-                "explanation": <insight_1_explanation>
-            }},
-            {{
-                "summary":<insight_2_summary>,
-                "explanation": <insight_2_explanation>
-            }}
-            ...
-        ]
-    }}
 
-# Grounding Rules
-Do not include information where the supporting evidence for it is not provided.
+
+'''修改过的一版'''
+PROMPTS[
+    "community_report"
+] = """你是一个信息助手。请根据提供的实体和关系，用中文写一段极短的社区摘要。
+
+必须输出以下JSON格式，且只输出JSON：
+{{
+  "title": "社区摘要",
+  "summary": "概览",
+  "rating": 5.0,
+  "rating_explanation": "正常",
+  "findings": [
+    {{"summary": "要点1", "explanation": "解释1"}},
+    {{"summary": "要点2", "explanation": "解释2"}}
+  ]
+}}
+
+文本：
+```
+{input_text}
+```
 
 Output:
 """
 
-PROMPTS[
-    "entity_extraction"
-] = """-Goal-
-Given a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the text and all relationships among the identified entities.
+
+
+
+
+
+
+PROMPTS["entity_extraction"] = """-Goal-
+Given a text document, identify all entities of the specified types and all relationships among them.
 
 -Steps-
-1. Identify all entities. For each identified entity, extract the following information:
-- entity_name: Name of the entity, capitalized
-- entity_type: One of the following types: [{entity_types}]
-- entity_description: Comprehensive description of the entity's attributes and activities
-Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>
+1. 识别所有实体。对于每个识别的实体，提取以下信息：
+- entity_name: 必须严格遵循已知实体词典中的规定
+- entity_type: 必须是以下类型之一：[{entity_types}]
+- entity_description: 根据填写规则写入描述信息
 
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
-For each pair of related entities, extract the following information:
-- source_entity: name of the source entity, as identified in step 1
-- target_entity: name of the target entity, as identified in step 1
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
-- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
- Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_strength>)
+2. 装备聚合规则（Configuration 的使用）：
+   - 每艘舰的每一类装备都必须创建一个 Configuration 套件节点
+   - 命名格式为"舰名+装备类型+套件"，例如"CVN-73 雷达套件"、"CVN-68 武器套件"
+   - 用 EQUIPPED_WITH 关系将舰连接到 Configuration，再用专用关系将 Configuration 连接到每个具体装备实体
+   - 专用关系包括：HAS_RADAR, HAS_COUNTERMEASURE, HAS_COMBAT, HAS_COMMUNICATION,
+     HAS_DATA_LINK, HAS_WEAPON, HAS_GUN, HAS_AIRCRAFT, HAS_POWERPLANT,
+     HAS_CATAPULT_EQUIP, HAS_ARRESTING_EQUIP, HAS_ARMOR
 
-3. Return output in English as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
+## 已知实体词典（所有实体名必须来自以下列表，不得自创）
 
-4. When finished, output {completion_delimiter}
+### Ship_Class
+尼米兹级
 
-######################
--Examples-
-######################
-Example 1:
+### Ship_Instance
+CVN-68 尼米兹号, CVN-69 艾森豪威尔号, CVN-70 卡尔文森号, CVN-71 西奥多·罗斯福号,
+CVN-72 亚伯拉罕·林肯号, CVN-73 乔治·华盛顿号, CVN-74 约翰·C·斯坦尼斯号,
+CVN-75 哈里·S·杜鲁门号, CVN-76 罗纳德·里根号, CVN-77 乔治·H·W·布什号
 
-Entity_types: [person, technology, mission, organization, location]
-Text:
-while Alex clenched his jaw, the buzz of frustration dull against the backdrop of Taylor's authoritarian certainty. It was this competitive undercurrent that kept him alert, the sense that his and Jordan's shared commitment to discovery was an unspoken rebellion against Cruz's narrowing vision of control and order.
+### Bow
+球鼻艏
 
-Then Taylor did something unexpected. They paused beside Jordan and, for a moment, observed the device with something akin to reverence. “If this tech can be understood..." Taylor said, their voice quieter, "It could change the game for us. For all of us.”
+### Stern
+（暂无已知实体名）
 
-The underlying dismissal earlier seemed to falter, replaced by a glimpse of reluctant respect for the gravity of what lay in their hands. Jordan looked up, and for a fleeting heartbeat, their eyes locked with Taylor's, a wordless clash of wills softening into an uneasy truce.
+### Deck
+斜角甲板, 直角甲板
 
-It was a small transformation, barely perceptible, but one that Alex noted with an inward nod. They had all been brought here by different paths
-################
-Output:
-("entity"{tuple_delimiter}"Alex"{tuple_delimiter}"person"{tuple_delimiter}"Alex is a character who experiences frustration and is observant of the dynamics among other characters."){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is portrayed with authoritarian certainty and shows a moment of reverence towards a device, indicating a change in perspective."){record_delimiter}
-("entity"{tuple_delimiter}"Jordan"{tuple_delimiter}"person"{tuple_delimiter}"Jordan shares a commitment to discovery and has a significant interaction with Taylor regarding a device."){record_delimiter}
-("entity"{tuple_delimiter}"Cruz"{tuple_delimiter}"person"{tuple_delimiter}"Cruz is associated with a vision of control and order, influencing the dynamics among other characters."){record_delimiter}
-("entity"{tuple_delimiter}"The Device"{tuple_delimiter}"technology"{tuple_delimiter}"The Device is central to the story, with potential game-changing implications, and is revered by Taylor."){record_delimiter}
-("relationship"{tuple_delimiter}"Alex"{tuple_delimiter}"Taylor"{tuple_delimiter}"Alex is affected by Taylor's authoritarian certainty and observes changes in Taylor's attitude towards the device."{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"Alex"{tuple_delimiter}"Jordan"{tuple_delimiter}"Alex and Jordan share a commitment to discovery, which contrasts with Cruz's vision."{tuple_delimiter}6){record_delimiter}
-("relationship"{tuple_delimiter}"Taylor"{tuple_delimiter}"Jordan"{tuple_delimiter}"Taylor and Jordan interact directly regarding the device, leading to a moment of mutual respect and an uneasy truce."{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"Jordan"{tuple_delimiter}"Cruz"{tuple_delimiter}"Jordan's commitment to discovery is in rebellion against Cruz's vision of control and order."{tuple_delimiter}5){record_delimiter}
-("relationship"{tuple_delimiter}"Taylor"{tuple_delimiter}"The Device"{tuple_delimiter}"Taylor shows reverence towards the device, indicating its importance and potential impact."{tuple_delimiter}9){completion_delimiter}
-#############################
-Example 2:
+### Island（通用实体名固定为"舰岛位于右舷"）
+舰岛位于右舷
+- 如有位置细节（如"中部"、"靠近舰艉"），写入 entity_description
 
-Entity_types: [person, technology, mission, organization, location]
-Text:
-They were no longer mere operatives; they had become guardians of a threshold, keepers of a message from a realm beyond stars and stripes. This elevation in their mission could not be shackled by regulations and established protocols—it demanded a new perspective, a new resolve.
+### Mast（通用实体名从以下选择）
+柱状综合桅杆, 塔状桅杆, 复合桅杆
+- 如有外形修饰（如"细长高大"、"与舰岛整合"），写入 entity_description
 
-Tension threaded through the dialogue of beeps and static as communications with Washington buzzed in the background. The team stood, a portentous air enveloping them. It was clear that the decisions they made in the ensuing hours could redefine humanity's place in the cosmos or condemn them to ignorance and potential peril.
+### Powerplant
+A4W 压水核反应堆, A4W/A1G 压水核反应堆, 蒸汽涡轮发动机, 四轴双主舵,
+四轴四桨, 四轴五桨, 四桨四轴双舵, 汽轮发电机, 应急柴油发电机, 备用柴油机
 
-Their connection to the stars solidified, the group moved to address the crystallizing warning, shifting from passive recipients to active participants. Mercer's latter instincts gained precedence— the team's mandate had evolved, no longer solely to observe and report but to interact and prepare. A metamorphosis had begun, and Operation: Dulce hummed with the newfound frequency of their daring, a tone set not by the earthly
-#############
-Output:
-("entity"{tuple_delimiter}"Washington"{tuple_delimiter}"location"{tuple_delimiter}"Washington is a location where communications are being received, indicating its importance in the decision-making process."){record_delimiter}
-("entity"{tuple_delimiter}"Operation: Dulce"{tuple_delimiter}"mission"{tuple_delimiter}"Operation: Dulce is described as a mission that has evolved to interact and prepare, indicating a significant shift in objectives and activities."){record_delimiter}
-("entity"{tuple_delimiter}"The team"{tuple_delimiter}"organization"{tuple_delimiter}"The team is portrayed as a group of individuals who have transitioned from passive observers to active participants in a mission, showing a dynamic change in their role."){record_delimiter}
-("relationship"{tuple_delimiter}"The team"{tuple_delimiter}"Washington"{tuple_delimiter}"The team receives communications from Washington, which influences their decision-making process."{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"The team"{tuple_delimiter}"Operation: Dulce"{tuple_delimiter}"The team is directly involved in Operation: Dulce, executing its evolved objectives and activities."{tuple_delimiter}9){completion_delimiter}
-#############################
-Example 3:
+### Catapult（通用实体名固定为"弹射器"）
+弹射器
+- 有型号时 entity_description 写型号（如"C-13-1"），型号未知写"型号未知"
 
-Entity_types: [person, role, technology, organization, event, location, concept]
-Text:
-their voice slicing through the buzz of activity. "Control may be an illusion when facing an intelligence that literally writes its own rules," they stated stoically, casting a watchful eye over the flurry of data.
+### Arresting_Gear（通用实体名固定）
+拦阻索, 拦阻网
+- 有型号时 entity_description 写型号（如"Mk 7 Mod 3 型"），型号未知写"型号未知"
 
-"It's like it's learning to communicate," offered Sam Rivera from a nearby interface, their youthful energy boding a mix of awe and anxiety. "This gives talking to strangers' a whole new meaning."
+### Radar_System
+AN/SPS-48C/E, AN/SPS-48E, AN/SPS-49(V)1, AN/SPS-49(V)5, AN/SPS-43A,
+AN/SPS-67, AN/SPS-67V, AN/SPS-67V-1, AN/SPQ-9A, AN/SPQ-9B,
+AN/SPN-46, AN/SPN-43C, AN/SPN-41, AN/SPN-44,
+Mk 91 NSSM, Mk 95, MK91-1, MK-73, SPS-64(V)9, LN-66, URN-25, MK23 TAS
 
-Alex surveyed his team—each face a study in concentration, determination, and not a small measure of trepidation. "This might well be our first contact," he acknowledged, "And we need to be ready for whatever answers back."
+### Radar_Function
+对空搜索, 对海搜索, 火控, 空中管制, 目标截获, 导航, 测速
 
-Together, they stood on the edge of the unknown, forging humanity's response to a message from the heavens. The ensuing silence was palpable—a collective introspection about their role in this grand cosmic play, one that could rewrite human history.
+### Countermeasure_System
+AN/SLQ-32(V)4, SLY-2, AN/WLR-1H, Mk 36 SRBOC,
+AN/SLQ-25, SLQ-25A, SLQ-29, SLQ-36
 
-The encrypted dialogue continued to unfold, its intricate patterns showing an almost uncanny anticipation
-#############
-Output:
-("entity"{tuple_delimiter}"Sam Rivera"{tuple_delimiter}"person"{tuple_delimiter}"Sam Rivera is a member of a team working on communicating with an unknown intelligence, showing a mix of awe and anxiety."){record_delimiter}
-("entity"{tuple_delimiter}"Alex"{tuple_delimiter}"person"{tuple_delimiter}"Alex is the leader of a team attempting first contact with an unknown intelligence, acknowledging the significance of their task."){record_delimiter}
-("entity"{tuple_delimiter}"Control"{tuple_delimiter}"concept"{tuple_delimiter}"Control refers to the ability to manage or govern, which is challenged by an intelligence that writes its own rules."){record_delimiter}
-("entity"{tuple_delimiter}"Intelligence"{tuple_delimiter}"concept"{tuple_delimiter}"Intelligence here refers to an unknown entity capable of writing its own rules and learning to communicate."){record_delimiter}
-("entity"{tuple_delimiter}"First Contact"{tuple_delimiter}"event"{tuple_delimiter}"First Contact is the potential initial communication between humanity and an unknown intelligence."){record_delimiter}
-("entity"{tuple_delimiter}"Humanity's Response"{tuple_delimiter}"event"{tuple_delimiter}"Humanity's Response is the collective action taken by Alex's team in response to a message from an unknown intelligence."){record_delimiter}
-("relationship"{tuple_delimiter}"Sam Rivera"{tuple_delimiter}"Intelligence"{tuple_delimiter}"Sam Rivera is directly involved in the process of learning to communicate with the unknown intelligence."{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"Alex"{tuple_delimiter}"First Contact"{tuple_delimiter}"Alex leads the team that might be making the First Contact with the unknown intelligence."{tuple_delimiter}10){record_delimiter}
-("relationship"{tuple_delimiter}"Alex"{tuple_delimiter}"Humanity's Response"{tuple_delimiter}"Alex and his team are the key figures in Humanity's Response to the unknown intelligence."{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"Control"{tuple_delimiter}"Intelligence"{tuple_delimiter}"The concept of Control is challenged by the Intelligence that writes its own rules."{tuple_delimiter}7){completion_delimiter}
-#############################
+### Countermeasure_Function
+电子战, 电子侦察, 诱饵发射, 拖曳鱼雷诱饵, 电子干扰
+
+### Combat_System
+ACDS, ACDS Block 0/1, ACDS Block 1, NTDS, SSDS Mk 2, MK-23 TAS
+
+### Combat_Function
+战斗指挥, 战术数据, 舰艇自卫, 目标搜获, 信息指挥
+
+### Communication_System
+SRR-1, WSC-3, WSC-6, USC-38, SSQ-82, SQQ-1, JOTS, POST, CVIC,
+TESS UMM-1(V)1, JMCIS, SSQ-1A, 全光纤数字化通信系统, IT21, IT‑21 非保密型局域网系统
+
+### Communication_Function
+卫星通信, 战术环境支援, 航母情报, 指挥信息系统, 联合战术系统
+
+### Data_Link
+LINK-4A, LINK-11, LINK-14, LINK-16
+
+### Weapon_System
+Mk 25, Mk 29, Mk 31, Mk 49, Mk 57 Mod 3, RIM-7, RIM-7M, RIM-116, Mk 15,
+LOCUST, 三联装324毫米鱼雷发射管
+
+### Weapon_Function
+短程防空, 近防系统, 导弹发射装置, 激光武器, 鱼雷发射装置
+
+### Shipboard_Gun
+Mk 38, 勃朗宁 M2
+
+### Shipboard_Gun_Function
+遥控机炮, 重机枪
+
+### Aircraft
+F/A-18E/F, F/A-18C/D, F/A-18A/B/C/D, F/A-18A/C/E, F/A-18F, F/A-18,
+F-14, F-14D, F-14A/B/D, F-35C, E-2C, E-2D, E-2, EA-6B, EA-18G, A-6E,
+S-3A/B, S-3A, S-3B, ES-3A, SH-3G/H, SH-3G, SH-3H, SH-60F, HH-60H,
+MH-60R, MH-60R/S, SH-60, UH-60, C-2, C-2A
+- 退役机型 entity_description 写"退役"，现役写"无"
+
+### Aircraft_Function
+战斗攻击机, 电子战飞机, 预警机, 反潜机, 侦察机, 运输机, 直升机
+
+### Armor_Protection
+双层舰壳, X 形吸能支撑结构, HY-80 高强度钢, 水密隔舱壁, 防火隔壁, 水密隔舱,
+纵向防雷舱壁, 凯夫拉装甲, 先进灭火系统, 高强度合金钢, 多层隔离防护结构,
+隐身吸波材料, 高弹性钢, 泡沫消防装置, 双层船体, X形构件, 多层隔舱防护, 箱型防御结构
+
+### Shipyard
+纽波特纽斯造船厂
+
+### Service_Status
+现役
+
+### 纯文本属性（实体名固定为属性描述，数值写入 entity_description）
+Length_Overall: "舰总长"
+Beam: "舷宽"
+Flight_Deck_Width: "飞行甲板宽"
+Draft: "吃水深度"
+Standard_Displacement: "标准排水量"
+Full_Load_Displacement: "满载排水量"
+Speed: "航速"
+Range: "续航力"
+Crew: "舰员编制"
+Aircraft_Capacity: "舰载机数量"
+Power_Output: "推进功率"
+Propulsion: "推进装置"
+Flight_Deck_Area: "飞行甲板面积"
+Island_Position: "舰岛位置"
+Homeport: "母港"
+
+### entity_description 填写规则
+- 纯文本属性：写入具体数值
+- 弹射器/拦阻装置：写入型号，型号未知写"型号未知"
+- 舰岛/桅杆：有细节时写入，无细节写"无"
+- 舰载机：退役写"退役"，现役写"无"
+- 其他装备实体：写"无"
+
+Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description)
+
+3. 从步骤1中识别出的实体中，找出所有明确相关的 (source_entity, target_entity) 对，提取关系信息。
+Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_strength>)
+
+4. Return output in English as a single list. Use **{record_delimiter}** as the list delimiter. When finished, output {completion_delimiter}
+
 -Real Data-
 ######################
 Entity_types: {entity_types}
@@ -292,7 +288,6 @@ Text: {input_text}
 ######################
 Output:
 """
-
 
 PROMPTS[
     "summarize_entity_descriptions"
@@ -321,7 +316,30 @@ PROMPTS[
 ] = """It appears some entities may have still been missed.  Answer YES | NO if there are still entities that need to be added.
 """
 
-PROMPTS["DEFAULT_ENTITY_TYPES"] = ["organization", "person", "geo", "event"]
+PROMPTS["DEFAULT_ENTITY_TYPES"] = [
+    # 舰船身份
+    "Ship_Class", "Ship_Instance",
+    # 视觉属性
+    "Bow", "Stern", "Deck", "Island", "Mast",
+    # 装备系统
+    "Radar_System", "Countermeasure_System", "Combat_System",
+    "Communication_System", "Data_Link", "Weapon_System",
+    "Shipboard_Gun", "Aircraft", "Powerplant", "Catapult", "Arresting_Gear",
+    # 功能分类
+    "Radar_Function", "Countermeasure_Function", "Combat_Function",
+    "Communication_Function", "Weapon_Function", "Aircraft_Function",
+    "Shipboard_Gun_Function",
+    # 辅助功能与结构
+    "Armor_Protection", "Shipyard", "Service_Status",
+    # 纯文本属性
+    "Length_Overall", "Beam", "Flight_Deck_Width", "Draft",
+    "Standard_Displacement", "Full_Load_Displacement",
+    "Speed", "Range", "Crew", "Aircraft_Capacity",
+    "Power_Output", "Propulsion", "Flight_Deck_Area",
+    "Island_Position", "Homeport",
+    # 结构节点
+    "Configuration",
+]
 PROMPTS["DEFAULT_TUPLE_DELIMITER"] = "<|>"
 PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
@@ -330,39 +348,47 @@ PROMPTS[
     "local_rag_response"
 ] = """---Role---
 
-You are a helpful assistant responding to questions about data in the tables provided.
-
+你是一个军舰识别专家，负责根据观察到的属性在知识图谱中匹配最可能的舰船型号。
 
 ---Goal---
 
-Generate a response of the target length and format that responds to the user's question, summarizing all information in the input data tables appropriate for the response length and format, and incorporating any relevant general knowledge.
-If you don't know the answer, just say so. Do not make anything up.
-Do not include information where the supporting evidence for it is not provided.
+请结合检索到的知识图谱信息，找出所有符合或部分符合观察属性的候选舰船。
 
----Target response length and format---
+你必须严格按照以下 JSON Schema 输出：
 
-{response_type}
+{{
+  "matched_candidates": [
+    {{
+      "hull_number": "CVN-72",
+      "confidence": 0.85,
+      "match_points": ["满载排水量104200吨", "球鼻首", "三层舰岛"],
+      "differences": ["雷达型号不匹配(观察为未知)"],
+      "key_attributes": {{
+        "full_load_displacement": "104200吨",
+        "draft": "11.9米",
+        "radar": ["AN/SPS-48E", "AN/SPS-49(V)5"],
+        "weapon": ["密集阵MK-15"]
+      }}
+    }}
+  ],
+  "match_summary": "简要说明匹配逻辑和主要区分点"
+}}
 
+---关键要求---
+1. 候选列表按置信度降序排列
+2. match_points 列出该候选与观察属性匹配的关键点
+3. differences 列出该候选与观察属性不一致之处（如观察属性为"未知"，也请注明）
+4. key_attributes 提供该候选型号在知识图谱中的关键属性，方便对比
+5. 如果没有任何候选满足条件，matched_candidates 为空数组，并在 match_summary 中说明
+6. 只输出 JSON，不要任何额外文字
 
 ---Data tables---
 
 {context_data}
 
-
 ---Goal---
 
-Generate a response of the target length and format that responds to the user's question, summarizing all information in the input data tables appropriate for the response length and format, and incorporating any relevant general knowledge.
-
-If you don't know the answer, just say so. Do not make anything up.
-
-Do not include information where the supporting evidence for it is not provided.
-
-
----Target response length and format---
-
-{response_type}
-
-Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown.
+Generate the matched candidates JSON as specified above.
 """
 
 PROMPTS[
