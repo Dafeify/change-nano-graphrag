@@ -1877,7 +1877,7 @@ CVN-74 装甲防护套件:
 
 
 
-
+【CVN-75 哈里·S·杜鲁门号】
 [SHIP]
 
 Ship_Instance: CVN-75 哈里·S·杜鲁门号
