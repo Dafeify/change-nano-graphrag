@@ -1733,13 +1733,13 @@ ACDS Block 1
 信息指挥：未知
 
 [COMMUNICATION_SYSTEM]
-IT21
+IT-21
 
 [COMMUNICATION_FUNCTION]
 卫星通信：未知
 战术环境支援：未知
 航母情报：未知
-指挥信息系统：IT21
+指挥信息系统：IT-21
 联合战术系统：未知
 
 [DATA_LINK]
@@ -1832,7 +1832,7 @@ CVN-74 作战系统套件:
 ACDS Block 1
 
 CVN-74 通信套件:
-IT21
+IT-21
 
 CVN-74 数据链套件:
 未知
