@@ -5882,350 +5882,11 @@ def v49_1_promote_top_candidate_when_safe(
     return match_result
 
 
-
-# ==================== v49.7: five-evidence category-only boundary correction ====================
-# 目的：
-# - v49.6 失败的根因是把“五类证据”用于恢复 known_class，导致 open-set 被打穿。
-# - v49.7 只允许五类证据修正 category_unknown/open-set 的大类，不允许补全具体已知舰级。
-# - 已经是 known_class 的结果完全不动；pred_known_class 保持空；pred_open_set 保持 True。
-
-V49_7_CATEGORIES = ["航空母舰", "巡洋舰", "驱逐舰", "护卫舰", "两栖舰", "登陆舰"]
-V49_7_NEG_PREFIXES = ["无", "没有", "未见", "未配备", "不具备", "缺乏", "并无", "不是", "并非", "非"]
-
-# 五类证据之一：独有强锚点。这里用于“大类强指向”，不用于恢复具体已知舰级。
-V49_7_UNIQUE_ANCHORS = {
-    "航空母舰": ["航空母舰", "核动力航空母舰", "超级航母", "航母本体", "蒸汽弹射器", "弹射器", "拦阻索", "固定翼舰载机", "舰载机联队", "10万吨", "十万吨", "100架", "CVN"],
-    "巡洋舰": ["导弹巡洋舰", "宙斯盾巡洋舰", "提康德罗加", "122单元", "122枚", "16组八联装", "十六组八联装", "舰队指挥", "区域防空旗舰", "前后各有一门", "舰艏和舰艉各一门", "双127"],
-    "驱逐舰": ["导弹驱逐舰", "防空驱逐舰", "宙斯盾驱逐舰", "阿利伯克", "阿利·伯克", "DDG51", "DDG-51", "90-96单元", "96单元", "FlightIIA", "FlightIII", "SPY-1D", "AN/SPY-1D"],
-    "护卫舰": ["护卫舰", "巡防舰", "濒海战斗舰", "LCS", "三体船", "三体结构", "多体结构", "独立级", "57mm", "57毫米", "模块化任务", "任务模块", "近海作战"],
-    "两栖舰": ["两栖攻击舰", "两栖舰", "LHD", "黄蜂级", "STOVL", "F-35B", "AV-8B", "垂直起降", "短距起飞"],
-    "登陆舰": ["船坞登陆舰", "船坞登陆", "登陆舰", "LSD", "惠德比", "4艘LCAC", "四艘LCAC", "登陆艇投送", "大型船坞", "泛水坞舱"],
-}
-
-# 五类证据之二：共享区分特征。它能区分一组大类，但不能直接说明就是某个已知类。
-V49_7_SHARED_DISTINGUISHING = {
-    "航空母舰": ["全通飞行甲板", "斜角飞行甲板", "右舷舰岛", "大型飞行甲板", "飞机升降机", "舰载机", "机库"],
-    "巡洋舰": ["大量垂发", "大量垂直发射", "垂直发射", "垂发", "相控阵", "宙斯盾", "区域防空", "指挥控制", "编队指挥"],
-    "驱逐舰": ["垂直发射", "垂发", "相控阵", "宙斯盾", "区域防空", "127mm", "127毫米", "舰艏主炮", "多用途", "防空"],
-    "护卫舰": ["中小口径", "57mm", "57毫米", "76mm", "艉部直升机甲板", "直升机甲板", "低矮隐身", "反潜", "护航", "巡逻", "近海"],
-    "两栖舰": ["全通飞行甲板", "直升机甲板", "坞舱", "艉门", "车辆甲板", "运兵", "登陆艇", "两栖投送", "两栖攻击"],
-    "登陆舰": ["坞舱", "艉门", "登陆艇", "LCAC", "LCU", "车辆甲板", "登陆作战", "船坞"],
-}
-
-# 五类证据之三：普通弱特征。只能辅助，不能单独触发大类修正。
-V49_7_WEAK_FEATURES = {
-    "航空母舰": ["大型舰", "海上力量", "航空作业", "飞机"],
-    "巡洋舰": ["大型水面舰", "防空", "导弹", "指挥"],
-    "驱逐舰": ["水面战斗舰", "导弹", "防空", "护航"],
-    "护卫舰": ["中型舰", "轻型舰", "反潜", "护卫", "巡逻"],
-    "两栖舰": ["直升机", "运兵", "车辆", "两栖"],
-    "登陆舰": ["登陆", "运输", "车辆", "船坞"],
-}
-
-# 五类证据之四：反向排除特征。注意：这里是对“目标大类”扣分/阻断。
-V49_7_NEGATIVE_EXCLUSION = {
-    "航空母舰": ["无弹射器", "没有弹射器", "无拦阻索", "没有拦阻索", "无全通飞行甲板", "无固定翼", "无法固定翼"],
-    "巡洋舰": ["三体船", "三体结构", "57mm", "57毫米", "中小口径", "坞舱", "艉门", "登陆艇", "全通飞行甲板"],
-    "驱逐舰": ["三体船", "三体结构", "57mm", "57毫米", "中小口径", "坞舱", "艉门", "登陆艇", "全通飞行甲板"],
-    "护卫舰": ["122单元", "122枚", "96单元", "90-96单元", "舰队指挥", "区域防空旗舰", "坞舱", "艉门", "全通飞行甲板"],
-    "两栖舰": ["无坞舱", "没有坞舱", "无艉门", "没有艉门", "弹射器", "拦阻索", "三体船", "122单元"],
-    "登陆舰": ["无坞舱", "没有坞舱", "无艉门", "没有艉门", "弹射器", "拦阻索", "三体船", "STOVL", "F-35B", "AV-8B"],
-}
-
-
-def v49_7_slot(observed: Optional[Dict[str, Dict[str, Any]]], path: str) -> str:
-    if not isinstance(observed, dict) or "." not in path:
-        return ""
-    group, slot = path.split(".", 1)
-    obj = observed.get(group, {})
-    if not isinstance(obj, dict):
-        return ""
-    value = obj.get(slot, "")
-    if isinstance(value, list):
-        return " ".join(clean_text(x) for x in value)
-    return clean_text(value)
-
-
-def v49_7_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
-    parts: List[str] = []
-    if isinstance(observed, dict):
-        meta = observed.get("_META", {})
-        if isinstance(meta, dict):
-            parts.append(clean_text(meta.get("raw_text", "")))
-        for group, slots in observed.items():
-            if str(group).startswith("_") or not isinstance(slots, dict):
-                continue
-            for slot, value in slots.items():
-                parts.append(str(slot))
-                if isinstance(value, list):
-                    parts.extend(clean_text(x) for x in value)
-                else:
-                    parts.append(clean_text(value))
-    return " ".join(x for x in parts if x)
-
-
-def v49_7_has_raw_pattern(text_key: str, cue: str) -> bool:
-    ck = compact_key(cue)
-    return bool(ck and ck in text_key)
-
-
-def v49_7_has_positive_cue(text_key: str, cue: str) -> bool:
-    ck = compact_key(cue)
-    if not ck or ck not in text_key:
-        return False
-    # 避免把“无坞舱/没有弹射器/未见全通飞行甲板”当成正向证据。
-    for prefix in V49_7_NEG_PREFIXES:
-        if compact_key(prefix + cue) in text_key:
-            return False
-    return True
-
-
-def v49_7_add_evidence(report: Dict[str, Any], category: str, evidence_type: str, cue: str, score: float):
-    report[category]["score"] += score
-    report[category]["evidence_types"].add(evidence_type)
-    report[category]["evidence"].append({"type": evidence_type, "cue": cue, "score": score})
-    if evidence_type == "negative_exclusion":
-        report[category]["negative_count"] += 1
-    if evidence_type == "shared_distinguishing":
-        report[category]["shared_count"] += 1
-    if evidence_type == "unique_anchor":
-        report[category]["unique_count"] += 1
-    if evidence_type == "combo_evidence":
-        report[category]["combo_count"] += 1
-
-
-def v49_7_score_categories(observed: Optional[Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
-    raw = v49_7_text_blob(observed)
-    text_key = compact_key(raw)
-    report: Dict[str, Any] = {
-        cat: {
-            "score": 0.0,
-            "evidence_types": set(),
-            "evidence": [],
-            "negative_count": 0,
-            "shared_count": 0,
-            "unique_count": 0,
-            "combo_count": 0,
-        }
-        for cat in V49_7_CATEGORIES
-    }
-
-    # 1. 独有强锚点
-    for cat, cues in V49_7_UNIQUE_ANCHORS.items():
-        for cue in cues:
-            if v49_7_has_positive_cue(text_key, cue):
-                v49_7_add_evidence(report, cat, "unique_anchor", cue, 5.0)
-
-    # 2. 共享区分特征
-    for cat, cues in V49_7_SHARED_DISTINGUISHING.items():
-        for cue in cues:
-            if v49_7_has_positive_cue(text_key, cue):
-                v49_7_add_evidence(report, cat, "shared_distinguishing", cue, 2.2)
-
-    # 3. 普通弱特征
-    for cat, cues in V49_7_WEAK_FEATURES.items():
-        for cue in cues:
-            if v49_7_has_positive_cue(text_key, cue):
-                v49_7_add_evidence(report, cat, "weak_feature", cue, 0.6)
-
-    # 4. 反向排除特征
-    for cat, cues in V49_7_NEGATIVE_EXCLUSION.items():
-        for cue in cues:
-            # 排除特征可以是“无坞舱”这种否定短语，也可以是对其他大类的正向特征，如“三体船”排除巡洋/驱逐。
-            if v49_7_has_raw_pattern(text_key, cue):
-                v49_7_add_evidence(report, cat, "negative_exclusion", cue, -4.5)
-
-    # 5. 组合证据：组合证据只修大类，不恢复已知类。
-    flight_type = v49_7_slot(observed, "AVIATION_FEATURES.Flight_Deck_Type")
-    catapult = v49_7_slot(observed, "AVIATION_FEATURES.Catapult")
-    arrest = v49_7_slot(observed, "AVIATION_FEATURES.Arresting_Gear")
-    fixed_wing = v49_7_slot(observed, "AVIATION_FEATURES.Fixed_Wing_Aircraft_Operation")
-    well = v49_7_slot(observed, "AMPHIBIOUS_FEATURES.Well_Deck")
-    stern_gate = v49_7_slot(observed, "AMPHIBIOUS_FEATURES.Stern_Gate")
-    landing_craft = v49_7_slot(observed, "AMPHIBIOUS_FEATURES.Landing_Craft_Capability") + " " + v49_7_slot(observed, "EQUIPMENT_DETAILS.Landing_Craft")
-    vls = v49_7_slot(observed, "WEAPON_SENSOR_FEATURES.VLS_Count_Level") + " " + v49_7_slot(observed, "WEAPON_SENSOR_FEATURES.VLS_Presence")
-    gun = v49_7_slot(observed, "WEAPON_SENSOR_FEATURES.Main_Gun_Caliber") + " " + v49_7_slot(observed, "WEAPON_SENSOR_FEATURES.Main_Gun_Position")
-    radar = v49_7_slot(observed, "WEAPON_SENSOR_FEATURES.Phased_Array_Radar") + " " + v49_7_slot(observed, "WEAPON_SENSOR_FEATURES.Radar_Array_Type") + " " + v49_7_slot(observed, "EQUIPMENT_DETAILS.Radar_System")
-    mission = v49_7_slot(observed, "MISSION_FEATURES.Primary_Mission") + " " + v49_7_slot(observed, "MISSION_FEATURES.Area_Air_Defense") + " " + v49_7_slot(observed, "MISSION_FEATURES.Command_Control")
-    hull = v49_7_slot(observed, "VISUAL_STRUCTURE.Hull_Form")
-    superstructure = v49_7_slot(observed, "VISUAL_STRUCTURE.Superstructure_Type") + " " + v49_7_slot(observed, "VISUAL_STRUCTURE.Stealth_Shape")
-    module = v49_7_slot(observed, "EQUIPMENT_DETAILS.Mission_Module")
-
-    combo_text = compact_key(" ".join([raw, flight_type, catapult, arrest, fixed_wing, well, stern_gate, landing_craft, vls, gun, radar, mission, hull, superstructure, module]))
-
-    def has(cue: str) -> bool:
-        return v49_7_has_positive_cue(combo_text, cue)
-
-    if (has("弹射器") or catapult == "有") and (has("拦阻索") or arrest == "有"):
-        v49_7_add_evidence(report, "航空母舰", "combo_evidence", "弹射器+拦阻索", 6.0)
-    if has("全通飞行甲板") and (has("固定翼") or has("舰载机联队") or has("100架") or fixed_wing == "有"):
-        v49_7_add_evidence(report, "航空母舰", "combo_evidence", "全通飞行甲板+固定翼舰载机", 4.5)
-
-    if (has("122单元") or has("16组八联装") or "122" in vls) and (has("舰队指挥") or has("区域防空") or has("前后")):
-        v49_7_add_evidence(report, "巡洋舰", "combo_evidence", "122单元/大量垂发+指挥/区域防空", 6.0)
-    if has("前后垂发") and (has("舰队指挥") or has("区域防空")):
-        v49_7_add_evidence(report, "巡洋舰", "combo_evidence", "前后垂发+舰队防空指挥", 4.5)
-
-    if (has("96单元") or has("90-96单元") or has("MK41") or has("Mk41")) and (has("127") or has("舰艏主炮") or has("导弹驱逐舰")):
-        v49_7_add_evidence(report, "驱逐舰", "combo_evidence", "90/96单元或Mk41+127mm/导弹驱逐舰", 5.5)
-    if (has("相控阵") or has("SPY")) and (has("127") or has("舰艏主炮")) and (has("垂发") or has("垂直发射")):
-        v49_7_add_evidence(report, "驱逐舰", "combo_evidence", "相控阵+舰艏主炮+垂发", 4.5)
-
-    if (has("三体") or has("多体")) and (has("57") or has("模块") or has("艉部直升机甲板") or has("濒海")):
-        v49_7_add_evidence(report, "护卫舰", "combo_evidence", "三体/多体+57mm/模块化/艉部直升机甲板", 6.5)
-    if (has("57") or has("76") or has("中小口径")) and (has("反潜") or has("护航") or has("巡逻") or has("近海")):
-        v49_7_add_evidence(report, "护卫舰", "combo_evidence", "中小口径主炮+反潜/护航/巡逻", 4.0)
-
-    if has("全通飞行甲板") and (has("坞舱") or well == "有") and (has("STOVL") or has("垂直起降") or has("两栖攻击")):
-        v49_7_add_evidence(report, "两栖舰", "combo_evidence", "全通飞行甲板+坞舱+STOVL/两栖攻击", 6.0)
-    if (has("两栖攻击舰") or has("LHD")) and (has("直升机") or has("全通飞行甲板")):
-        v49_7_add_evidence(report, "两栖舰", "combo_evidence", "两栖攻击舰/LHD+航空甲板", 4.5)
-
-    if (has("坞舱") or well == "有") and (has("艉门") or stern_gate == "有") and (has("LCAC") or has("LCU") or has("登陆艇") or has("船坞登陆")):
-        v49_7_add_evidence(report, "登陆舰", "combo_evidence", "坞舱+艉门+LCAC/LCU/登陆艇", 6.0)
-    if (has("船坞登陆舰") or has("LSD")) and (has("坞舱") or has("登陆艇")):
-        v49_7_add_evidence(report, "登陆舰", "combo_evidence", "船坞登陆舰/LSD+坞舱/登陆艇", 4.5)
-
-    # set 转 list，便于 JSON 序列化。
-    for cat in V49_7_CATEGORIES:
-        report[cat]["score"] = round(float(report[cat]["score"]), 4)
-        report[cat]["evidence_types"] = sorted(list(report[cat]["evidence_types"]))
-    return report
-
-
-def v49_7_should_touch(match_result: Dict[str, Any]) -> Tuple[bool, str]:
-    final = match_result.get("final_decision") or {}
-    known = match_result.get("known_class_result") or {}
-    open_set = match_result.get("open_set_result") or {}
-
-    if v49_1_has_known_final(match_result):
-        return False, "final_known_class_do_not_touch"
-    if v49_nonempty_known_label(known) and not bool(open_set.get("is_unknown", False)):
-        return False, "known_class_result_explicit_do_not_touch"
-
-    result_type = final.get("result_type")
-    primary_class = clean_text(final.get("primary_class") or "")
-    is_open = bool(open_set.get("is_unknown", False)) or result_type in {"category_unknown", "ambiguous_category", "category_only"}
-    if primary_class not in V49_1_UNKNOWN_LABELS:
-        return False, "primary_class_not_empty_do_not_touch"
-    if not is_open:
-        return False, "not_open_set_or_category_unknown"
-    return True, "category_only_candidate"
-
-
-def v49_7_fix_category_only(match_result: Dict[str, Any], observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
-    """
-    v49.7：五类证据只修大类边界，不恢复 known_class。
-    只作用于 category_unknown/open-set/primary_class 为空的结果。
-    """
-    if not isinstance(match_result, dict):
-        return match_result
-
-    touch, reason = v49_7_should_touch(match_result)
-    if not touch:
-        match_result["v49_7_five_evidence_category_only"] = {"applied": False, "reason": reason}
-        return match_result
-
-    final = match_result.get("final_decision") or {}
-    category_result = match_result.get("category_result") or {}
-    open_set = match_result.get("open_set_result") or {}
-    current_cat = clean_text(final.get("primary_category") or category_result.get("label") or "")
-
-    scores = v49_7_score_categories(observed_attributes)
-    ranked = sorted(V49_7_CATEGORIES, key=lambda c: float(scores[c]["score"]), reverse=True)
-    top_cat = ranked[0] if ranked else ""
-    second_cat = ranked[1] if len(ranked) > 1 else ""
-    top_score = float(scores.get(top_cat, {}).get("score", 0.0)) if top_cat else 0.0
-    second_score = float(scores.get(second_cat, {}).get("score", 0.0)) if second_cat else 0.0
-    current_score = float(scores.get(current_cat, {}).get("score", 0.0)) if current_cat in scores else 0.0
-    top_report = scores.get(top_cat, {})
-
-    evidence_types = set(top_report.get("evidence_types", []))
-    strong_type_count = len(evidence_types.intersection({"unique_anchor", "shared_distinguishing", "combo_evidence"}))
-    has_combo = int(top_report.get("combo_count", 0)) > 0
-    has_unique = int(top_report.get("unique_count", 0)) > 0
-    shared_count = int(top_report.get("shared_count", 0))
-    negative_count = int(top_report.get("negative_count", 0))
-
-    # 共享区分特征可以触发修正，但不能单独触发；需要多个共享特征且当前类别有明显反证/低分。
-    shared_only_allowed = (
-        shared_count >= 3
-        and strong_type_count >= 1
-        and (current_score <= 1.0 or top_score - current_score >= 6.0)
-    )
-
-    allow_change = (
-        top_cat
-        and top_cat != current_cat
-        and negative_count == 0
-        and top_score >= 8.0
-        and top_score - max(current_score, second_score if second_cat != current_cat else -999.0) >= 3.0
-        and (
-            (has_combo and strong_type_count >= 2)
-            or (has_unique and strong_type_count >= 2)
-            or shared_only_allowed
-        )
-    )
-
-    debug = {
-        "current_category": current_cat,
-        "top_category": top_cat,
-        "second_category": second_cat,
-        "top_score": round(top_score, 4),
-        "second_score": round(second_score, 4),
-        "current_score": round(current_score, 4),
-        "top_evidence_types": sorted(list(evidence_types)),
-        "top_unique_count": int(top_report.get("unique_count", 0)),
-        "top_shared_count": shared_count,
-        "top_combo_count": int(top_report.get("combo_count", 0)),
-        "top_negative_count": negative_count,
-        "top_evidence": top_report.get("evidence", [])[:10],
-    }
-
-    if not allow_change:
-        match_result["v49_7_five_evidence_category_only"] = {
-            "applied": False,
-            "reason": "category_boundary_evidence_not_strong_enough",
-            **debug,
-        }
-        return match_result
-
-    # 只修大类，仍保持类别内未知，不写 known_class_result。
-    old_alts = final.get("alternatives") if isinstance(final, dict) else None
-    match_result["category_result"] = {
-        "label": top_cat,
-        "confidence": max(v49_1_float(category_result.get("confidence", 0.0)), min(0.98, 0.55 + top_score / 50.0)),
-        "status": "v49_7_category_boundary_corrected",
-        "reason": "v49.7：五类证据只修正类别内未知的大类，不恢复具体已知舰级。",
-    }
-    match_result["known_class_result"] = None
-    match_result["open_set_result"] = {
-        "is_unknown": True,
-        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=top_cat),
-        "reason": "v49.7：大类边界已由五类证据纠正，但仍保持 open-set 类别内未知。",
-    }
-    new_final = {
-        "result_type": "category_unknown",
-        "primary_category": top_cat,
-        "primary_class": None,
-        "confidence": round(min(0.98, 0.55 + top_score / 50.0), 4),
-        "status": "v49_7_five_evidence_category_only",
-        "message": f"最终判定：{top_cat}类别内未知类。v49.7 使用五类证据修正大类，但不恢复已知舰级。",
-        "alternatives": old_alts or final.get("alternatives", {}),
-    }
-    match_result["final_decision"] = new_final
-    match_result["v49_7_five_evidence_category_only"] = {
-        "applied": True,
-        "reason": "category_boundary_corrected_only_keep_open_set",
-        **debug,
-    }
-    return match_result
-
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """v49.7：基于 v49.3，五类证据只修 category_unknown 的大类，不恢复 known_class。"""
+    """v49.3：基于 v49.1，只对 open-set 候选提升增加温和锚点确认。"""
     result = _hierarchical_class_match_v48_base(class_data_path, observed_attributes)
 
     # 先保留 v49：known_class_result 明确时，强制 final_decision 与其一致。
@@ -6234,11 +5895,329 @@ def hierarchical_class_match(
     # 再执行 v49.1/v49.3：known_class_result 为空时，检查最高候选能否安全提升；
     # 如果原本是 open-set，再追加 v49.3 的候选提升确认门。
     result = v49_1_promote_top_candidate_when_safe(result, observed_attributes)
-
-    # 最后执行 v49.7：只修类别内未知的大类边界，不补具体已知舰级。
-    result = v49_7_fix_category_only(result, observed_attributes)
     return result
 
+
+
+# ==================== v49.5: conservative category-boundary repair ====================
+# 本轮进入第二个问题：大类边界错分。
+# 设计边界：
+# 1. 不再修改 v49.1/v49.3 的“最高候选提升”逻辑；
+# 2. 主要处理 category_unknown / open_set 场景的大类错分；
+# 3. 只在原始文本或属性卡槽中存在明确大类证据时，修正 primary_category；
+# 4. 默认保持 open_set=True，不把未知类强行拉回已知类，避免破坏上一轮收敛结果。
+
+_hierarchical_class_match_v49_3_base = hierarchical_class_match
+
+
+def v49_5_safe_float(x: Any, default: float = 0.0) -> float:
+    try:
+        if x is None or x == "":
+            return default
+        return float(x)
+    except Exception:
+        return default
+
+
+def v49_5_text_compact(x: Any) -> str:
+    try:
+        return compact_key(x)
+    except Exception:
+        return re.sub(r"\s+", "", str(x or "")).lower()
+
+
+def v49_5_collect_text(observed: Dict[str, Dict[str, Any]]) -> str:
+    parts: List[str] = []
+    try:
+        meta = observed.get("_META") or {}
+        if isinstance(meta, dict):
+            parts.append(str(meta.get("raw_text", "") or ""))
+    except Exception:
+        pass
+    try:
+        for group, slots in (observed or {}).items():
+            if str(group).startswith("_") or not isinstance(slots, dict):
+                continue
+            for slot, val in slots.items():
+                if isinstance(val, list):
+                    parts.extend(str(v or "") for v in val)
+                else:
+                    parts.append(str(val or ""))
+    except Exception:
+        pass
+    return " ".join(p for p in parts if p and p not in {"未知", "不确定", "未提及"})
+
+
+def v49_5_has(text: str, cue: str) -> bool:
+    if not text or not cue:
+        return False
+    return v49_5_text_compact(cue) in v49_5_text_compact(text)
+
+
+def v49_5_has_any(text: str, cues: List[str]) -> bool:
+    return any(v49_5_has(text, c) for c in cues)
+
+
+V49_5_NEGATION_WORDS = ["不是", "不像", "并非", "非", "未见", "没有", "无", "不属于", "区别于", "不同于"]
+
+
+def v49_5_negated(text: str, cue: str, window: int = 14) -> bool:
+    if not text or not cue:
+        return False
+    start = 0
+    while True:
+        idx = text.find(cue, start)
+        if idx < 0:
+            return False
+        prefix = text[max(0, idx - window):idx]
+        if any(w in prefix for w in V49_5_NEGATION_WORDS):
+            return True
+        start = idx + len(cue)
+
+
+def v49_5_slot(observed: Dict[str, Dict[str, Any]], dotted: str) -> str:
+    try:
+        group, slot = dotted.split('.', 1)
+        group_obj = observed.get(group, {}) if isinstance(observed, dict) else {}
+        if isinstance(group_obj, dict):
+            return clean_text(group_obj.get(slot, ""))
+    except Exception:
+        pass
+    return ""
+
+
+def v49_5_add(scores: Dict[str, float], cat: str, value: float):
+    if cat in scores:
+        scores[cat] += float(value)
+
+
+def v49_5_category_boundary_scores(observed: Dict[str, Dict[str, Any]]) -> Dict[str, float]:
+    """基于通用大类词 + 关键 slot 组合的保守大类纠偏分。"""
+    scores = {cat: 0.0 for cat in SHIP_CATEGORIES}
+    text = v49_5_collect_text(observed)
+
+    # 关键槽位。
+    hull = v49_5_slot(observed, "VISUAL_STRUCTURE.Hull_Form")
+    flight = v49_5_slot(observed, "AVIATION_FEATURES.Flight_Deck_Type")
+    catapult = v49_5_slot(observed, "AVIATION_FEATURES.Catapult")
+    arrest = v49_5_slot(observed, "AVIATION_FEATURES.Arresting_Gear")
+    hangar = v49_5_slot(observed, "AVIATION_FEATURES.Hangar")
+    well = v49_5_slot(observed, "AMPHIBIOUS_FEATURES.Well_Deck")
+    stern = v49_5_slot(observed, "AMPHIBIOUS_FEATURES.Stern_Gate")
+    lc_cap = v49_5_slot(observed, "AMPHIBIOUS_FEATURES.Landing_Craft_Capacity")
+    gun = v49_5_slot(observed, "WEAPON_SENSOR_FEATURES.Main_Gun_Caliber")
+    vls = v49_5_slot(observed, "WEAPON_SENSOR_FEATURES.VLS_Count_Level")
+    radar = v49_5_slot(observed, "WEAPON_SENSOR_FEATURES.Radar_Array_Type")
+    mission = v49_5_slot(observed, "MISSION_FEATURES.Primary_Mission")
+    anti_sub = v49_5_slot(observed, "MISSION_FEATURES.Anti_Submarine")
+    command = v49_5_slot(observed, "MISSION_FEATURES.Command_Control")
+    length = v49_5_slot(observed, "TEXT_ATTRIBUTES.Length_Overall")
+    disp = v49_5_slot(observed, "TEXT_ATTRIBUTES.Full_Load_Displacement")
+    crew = v49_5_slot(observed, "TEXT_ATTRIBUTES.Crew")
+
+    # A. 显式大类词。这里是最可靠的大类边界证据。
+    for cue in ["导弹驱逐舰", "防空驱逐舰", "大型驱逐舰", "主力驱逐舰", "驱逐舰"]:
+        if v49_5_has(text, cue) and not v49_5_negated(text, cue):
+            v49_5_add(scores, "驱逐舰", 26.0 if cue != "驱逐舰" else 20.0)
+            break
+
+    for cue in ["导弹巡洋舰", "宙斯盾巡洋舰", "大型巡洋舰", "巡洋舰", "舰队指挥", "指挥舰"]:
+        if v49_5_has(text, cue) and not v49_5_negated(text, cue):
+            v49_5_add(scores, "巡洋舰", 26.0 if "巡洋舰" in cue else 18.0)
+            break
+
+    for cue in ["护卫舰", "巡防舰", "反潜护卫舰", "通用护卫舰", "现代护卫舰", "中型护卫舰", "反潜护卫", "通用护卫"]:
+        if v49_5_has(text, cue) and not v49_5_negated(text, cue):
+            v49_5_add(scores, "护卫舰", 30.0)
+            break
+
+    # “护航”本身不能等同护卫舰；“航母带刀护卫/护航驱逐舰”反而偏驱逐舰。
+    if v49_5_has_any(text, ["航母的带刀护卫", "航母编队护航驱逐舰", "主力护航驱逐舰"]):
+        v49_5_add(scores, "驱逐舰", 24.0)
+    elif v49_5_has_any(text, ["巡逻护航", "近海护航", "反潜作战取向", "反潜作战"]):
+        v49_5_add(scores, "护卫舰", 16.0)
+
+    if v49_5_has_any(text, ["两栖攻击舰", "两栖船坞运输舰", "两栖运输舰", "两栖舰", "LHD", "LPD", "MV-22", "鱼鹰"]):
+        v49_5_add(scores, "两栖舰", 28.0)
+    if v49_5_has_any(text, ["船坞登陆舰", "船坞登陆", "登陆舰", "LSD", "井围甲板"]):
+        v49_5_add(scores, "登陆舰", 30.0)
+
+    # 航母本体词，排除“航母战斗群/航母编队护航”。
+    if v49_5_has_any(text, ["航空母舰", "超级航母", "核动力航母", "海上机场", "固定翼舰载机联队"]):
+        v49_5_add(scores, "航空母舰", 30.0)
+    elif v49_5_has(text, "航母") and not v49_5_has_any(text, ["航母战斗群", "航母编队", "航母护航"]):
+        v49_5_add(scores, "航空母舰", 14.0)
+
+    # B. slot 组合边界。
+    if catapult == "有" and arrest == "有":
+        v49_5_add(scores, "航空母舰", 28.0)
+
+    # 巡洋舰：122单元、前后主炮/垂发、舰队指挥、提康德罗加参数。
+    if "122" in vls or v49_5_has_any(text, ["122单元", "16组八联装", "前后垂发", "前后都有垂发", "舰艏和舰艉各一门", "双127"]):
+        v49_5_add(scores, "巡洋舰", 28.0)
+    if v49_5_has_any(text, ["区域防空旗舰", "舰队指挥", "编队指挥", "指挥中心"]):
+        v49_5_add(scores, "巡洋舰", 18.0)
+    if ("172" in length or "173" in length) and ("9480" in disp or "9500" in disp):
+        v49_5_add(scores, "巡洋舰", 34.0)
+
+    # 驱逐舰：伯克级/通用导弹驱逐舰强组合。
+    if v49_5_has_any(text, ["SPY-1D", "AN/SPY-1D", "SPY-6", "Flight IIA", "Flight III", "96单元", "90-96单元", "Mk41", "MK41", "宙斯盾驱逐舰"]):
+        v49_5_add(scores, "驱逐舰", 26.0)
+    if ("155" in length) and ("9200" in disp or "9238" in disp):
+        v49_5_add(scores, "驱逐舰", 32.0)
+    if ("127" in gun or "舰艏" in v49_5_slot(observed, "WEAPON_SENSOR_FEATURES.Main_Gun_Position")) and v49_5_has_any(text, ["相控阵", "垂发", "垂直发射", "防空", "导弹驱逐舰"]):
+        v49_5_add(scores, "驱逐舰", 14.0)
+
+    # 护卫舰：三体/LCS/57或76mm/低垂发/反潜护航/中等吨位。
+    if "三体" in hull or v49_5_has_any(text, ["三体船", "三体结构", "濒海战斗舰", "LCS", "任务模块", "模块化任务"]):
+        v49_5_add(scores, "护卫舰", 32.0)
+    if ("57" in gun or "76" in gun or "中小口径" in gun or "中口径" in gun) and v49_5_has_any(text, ["反潜", "护卫", "巡防", "护航", "近海"]):
+        v49_5_add(scores, "护卫舰", 24.0)
+    if v49_5_has_any(text, ["16单元", "低垂发", "少量垂发", "有限垂发", "拖曳阵列声纳", "拖曳阵列声呐"]):
+        v49_5_add(scores, "护卫舰", 18.0)
+        scores["巡洋舰"] -= 8.0
+        scores["驱逐舰"] -= 4.0
+    if ("3000" in disp or "3600" in disp or "4000" in disp or "6200" in disp) and v49_5_has_any(text, ["护卫舰", "巡防", "反潜", "护航"]):
+        v49_5_add(scores, "护卫舰", 16.0)
+
+    # 两栖舰 / 登陆舰边界。
+    if "全通" in flight and ("有" in well or "大型" in well or v49_5_has_any(text, ["STOVL", "F-35B", "AV-8B", "垂直起降", "3艘LCAC", "三艘LCAC"])):
+        v49_5_add(scores, "两栖舰", 24.0)
+    if v49_5_has_any(text, ["LPD", "两栖船坞运输舰", "MV-22", "鱼鹰", "2艘LCAC", "两艘LCAC", "720名"]):
+        v49_5_add(scores, "两栖舰", 26.0)
+    if v49_5_has_any(text, ["LSD", "船坞登陆舰", "4艘LCAC", "四艘LCAC", "大型井围甲板", "无直升机机库"]):
+        v49_5_add(scores, "登陆舰", 28.0)
+    if "4艘" in lc_cap or "四艘" in lc_cap:
+        v49_5_add(scores, "登陆舰", 18.0)
+    if "2艘" in lc_cap or "两艘" in lc_cap or "3艘" in lc_cap or "三艘" in lc_cap:
+        v49_5_add(scores, "两栖舰", 12.0)
+
+    # C. 反向排除，防止护卫/驱逐/两栖被误判为航母。
+    if v49_5_has_any(text, ["驱逐舰", "护卫舰", "巡防舰", "两栖攻击舰", "船坞登陆舰", "LPD", "LSD", "坞舱", "登陆艇", "反潜"]):
+        if not (catapult == "有" and arrest == "有"):
+            scores["航空母舰"] -= 20.0
+
+    return scores
+
+
+def v49_5_best_boundary_category(observed: Dict[str, Dict[str, Any]]) -> Tuple[str, float, float, Dict[str, float]]:
+    scores = v49_5_category_boundary_scores(observed)
+    ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    if not ranked:
+        return "", 0.0, 0.0, scores
+    top_cat, top_score = ranked[0]
+    second_score = ranked[1][1] if len(ranked) > 1 else 0.0
+    return top_cat, float(top_score), float(second_score), scores
+
+
+def v49_5_set_category_unknown(result: Dict[str, Any], category: str, reason: str, analysis: Dict[str, Any]) -> Dict[str, Any]:
+    old_cat = result.get("category_result") or {}
+    old_final = result.get("final_decision") or {}
+    confidence = max(v49_5_safe_float(old_cat.get("confidence")), v49_5_safe_float(old_final.get("confidence")), 0.58)
+
+    result["category_result"] = {
+        "label": category,
+        "confidence": round(confidence, 4),
+        "status": "matched",
+        "reason": reason,
+    }
+    result["known_class_result"] = {
+        "label": None,
+        "category": category,
+        "confidence": 0.0,
+        "score": 0.0,
+        "known_status": "UnknownWithinCategory",
+        "reason": reason,
+    }
+    result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+    old_alts = old_final.get("alternatives") if isinstance(old_final, dict) else None
+    result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": round(confidence, 4),
+        "status": "v49_5_category_boundary_repaired",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+    }
+    if old_alts:
+        result["final_decision"]["alternatives"] = old_alts
+    result["v49_5_category_boundary_fix"] = {"applied": True, **analysis}
+    return result
+
+
+def v49_5_should_repair_category(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Tuple[bool, str, Dict[str, Any]]:
+    final = result.get("final_decision") or {}
+    open_set = result.get("open_set_result") or {}
+    current_cat = clean_text((result.get("category_result") or {}).get("label") or final.get("primary_category") or "")
+    current_cls = clean_text((result.get("known_class_result") or {}).get("label") or final.get("primary_class") or "")
+    result_type = clean_text(final.get("result_type") or "")
+    conf = v49_5_safe_float(final.get("confidence"))
+
+    top_cat, top_score, second_score, scores = v49_5_best_boundary_category(observed)
+    margin = top_score - second_score
+
+    analysis = {
+        "pred_category_before_v49_5": current_cat,
+        "pred_class_before_v49_5": current_cls,
+        "pred_result_type_before_v49_5": result_type,
+        "pred_open_set_before_v49_5": bool(open_set.get("is_unknown", False)),
+        "pred_confidence_before_v49_5": round(conf, 4),
+        "boundary_top_category": top_cat,
+        "boundary_top_score": round(top_score, 4),
+        "boundary_second_score": round(second_score, 4),
+        "boundary_margin": round(margin, 4),
+        "boundary_scores": {k: round(v, 4) for k, v in scores.items()},
+    }
+
+    if not top_cat or top_cat not in SHIP_CATEGORIES:
+        return False, "no_boundary_category", analysis
+
+    # 只在大类证据足够明确时纠偏。
+    strong_boundary = top_score >= 20.0 and margin >= 6.0
+    very_strong_boundary = top_score >= 30.0 and margin >= 3.0
+    if not (strong_boundary or very_strong_boundary):
+        return False, "boundary_score_not_strong_enough", analysis
+
+    if top_cat == current_cat:
+        return False, "same_category_no_repair_needed", analysis
+
+    # A. category_unknown/open_set 的大类错分是本轮主要处理对象。
+    if bool(open_set.get("is_unknown", False)) or result_type in {"category_unknown", "category_only", "ambiguous_category"} or not current_cls:
+        return True, "repair_open_set_or_category_only_boundary", analysis
+
+    # B. 已经输出 known_class 时要非常保守：只有低置信跨大类已知输出，才改回类别内未知。
+    #    这主要修“未知护卫舰被低置信拉成两栖/驱逐已知类”这种情况，避免误伤真实已知类。
+    if result_type == "known_class" and current_cls and current_cat != top_cat:
+        if conf <= 0.68 and top_score >= 28.0 and margin >= 8.0:
+            return True, "repair_low_conf_cross_category_known_boundary", analysis
+
+    return False, "known_class_boundary_not_repaired", analysis
+
+
+def v49_5_repair_category_boundary(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(result, dict):
+        return result
+    should, reason, analysis = v49_5_should_repair_category(result, observed)
+    if not should:
+        result["v49_5_category_boundary_fix"] = {"applied": False, "reason": reason, **analysis}
+        return result
+    top_cat = analysis.get("boundary_top_category")
+    repair_reason = f"v49.5：大类边界纠偏，通用大类词/关键槽位更明确支持 {top_cat}，因此保持为该大类类别内未知，不强行闭集到已知舰级。"
+    return v49_5_set_category_unknown(result, top_cat, repair_reason, analysis)
+
+
+def hierarchical_class_match(
+    class_data_path: str,
+    observed_attributes: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """v49.5：在 v49.3 基线上新增保守的大类边界纠偏。"""
+    result = _hierarchical_class_match_v49_3_base(class_data_path, observed_attributes)
+    result = v49_5_repair_category_boundary(result, observed_attributes)
+    return result
 
 if __name__ == "__main__":
     asyncio.run(main())
