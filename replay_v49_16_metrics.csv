@@ -1,0 +1,4 @@
+﻿dataset,total,exact_correct,exact_acc,category_acc,known_class_acc,open_set_acc,summary_file,error_file
+origin_80,80,70,0.875,0.975,0.9,0.9125,D:\project\PythonProjects\nano-graphrag\batch_results_v17_v2_80\replay_v49_16_summary.csv,D:\project\PythonProjects\nano-graphrag\batch_results_v17_v2_80\replay_v49_16_errors.csv
+origin_100,100,95,0.95,0.98,0.96,0.98,D:\project\PythonProjects\nano-graphrag\batch_results_test_100\replay_v49_16_summary.csv,D:\project\PythonProjects\nano-graphrag\batch_results_test_100\replay_v49_16_errors.csv
+anchor_80,80,77,0.9625,1.0,0.9625,0.9625,D:\project\PythonProjects\nano-graphrag\batch_results_dev_anchor_80\replay_v49_16_summary.csv,D:\project\PythonProjects\nano-graphrag\batch_results_dev_anchor_80\replay_v49_16_errors.csv

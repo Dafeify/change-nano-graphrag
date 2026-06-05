@@ -6695,595 +6695,162 @@ def hierarchical_class_match(
     return result
 
 
-# ==================== v49.16: surface-combatant parameter/category boundary fix ====================
-# 目标：基于 v49.12，先不再恢复 known_class，只处理“类别内未知/开放集”的水面作战舰大类边界。
-# 背景：
-# - 诊断显示剩余错误里较多是 unknown -> unknown 但大类错，尤其护卫舰/驱逐舰/巡洋舰边界。
-# - 参数型文本（长度、排水量、垂发数量、乘员、续航）经常被现有规则误吸到巡洋舰/航空母舰/驱逐舰。
+# ==================== v49.14: safer known-class recovery after v49.12 ====================
+# 目标：基于 v49.12，处理 V49.11/V49.12 为保护 open-set 而产生的副作用：
+# 部分真实已知类被过度保守地回退成 category_unknown。
 # 约束：
-# - 只改 category_unknown/open-set 的 primary_category；
-# - 不填 pred_known_class，不恢复阿利·伯克/独立级；
-# - 不触碰已经明确 known_class 的结果，避免破坏 v49.11/v49.12 的 open-set 保护。
+# 1. 只在 final_decision.result_type == category_unknown 时尝试恢复；
+# 2. 只恢复“有较强已知类锚点”的阿利·伯克级和独立级；
+# 3. 明确未知/未收录/不像已知/缺少专属锚点/反证时不恢复；
+# 4. 不改变 v49.11 已经压住的 unknown->known 保护逻辑。
 
 _hierarchical_class_match_v49_12_base = hierarchical_class_match
 
 
-def v49_16_number_patterns(text: str) -> Dict[str, List[float]]:
-    """从原文里抽取少量对水面作战舰边界有用的数值。"""
-    t = str(text or "")
-    nums = {"length_m": [], "displacement_t": [], "crew": [], "vls_cells": []}
-
-    # 舰长 / 长度
-    for m in re.finditer(r"(?:舰长|全长|长度|长)\s*(?:约|为)?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:m|米)", t, flags=re.I):
-        try:
-            nums["length_m"].append(float(m.group(1)))
-        except Exception:
-            pass
-
-    # 满载/标准/排水量
-    for m in re.finditer(r"(?:满载排水量|标准排水量|排水量)\s*(?:约|为)?\s*([0-9]+(?:\.[0-9]+)?)\s*吨", t):
-        try:
-            nums["displacement_t"].append(float(m.group(1)))
-        except Exception:
-            pass
-
-    # 乘员
-    for m in re.finditer(r"(?:乘员|舰员|船员)\s*(?:约|为)?\s*([0-9]+)\s*人", t):
-        try:
-            nums["crew"].append(float(m.group(1)))
-        except Exception:
-            pass
-
-    # 垂发单元/具/个
-    for m in re.finditer(r"([0-9]+)\s*(?:单元|具|个)\s*(?:Mk\s*41|MK41|垂直发射|垂发)", t, flags=re.I):
-        try:
-            nums["vls_cells"].append(float(m.group(1)))
-        except Exception:
-            pass
-    for m in re.finditer(r"(?:Mk\s*41|MK41|垂直发射|垂发)[^0-9]{0,8}([0-9]+)\s*(?:单元|具|个)", t, flags=re.I):
-        try:
-            nums["vls_cells"].append(float(m.group(1)))
-        except Exception:
-            pass
-    # 12组八联装 -> 96；2组八联装 -> 16
-    for m in re.finditer(r"([0-9]+)\s*组\s*八联装", t):
-        try:
-            nums["vls_cells"].append(float(m.group(1)) * 8.0)
-        except Exception:
-            pass
-
-    return nums
+def v49_13_candidate_conf(result: Dict[str, Any], class_name: str) -> float:
+    """从候选列表和 final alternatives 中读取某个已知类的候选置信度。"""
+    vals: List[float] = []
+    for r in result.get("known_class_candidates") or []:
+        if clean_text(r.get("label") or r.get("ship_class") or "") == class_name:
+            vals.append(v49_1_float(r.get("confidence", r.get("score", 0.0))))
+    final = result.get("final_decision") or {}
+    alts = final.get("alternatives") or {}
+    for r in alts.get("top_known_classes") or []:
+        if clean_text(r.get("label") or r.get("ship_class") or "") == class_name:
+            vals.append(v49_1_float(r.get("confidence", r.get("score", 0.0))))
+    return max(vals or [0.0])
 
 
-def v49_16_is_open_category_only(result: Dict[str, Any]) -> bool:
-    """只允许处理类别内未知/open-set，不处理已知类。"""
+def v49_13_has_explicit_unknown_or_reject(text: str) -> bool:
+    """明确开放集/反证/缺少锚点时，不做已知类恢复。"""
+    return v49_11_has_any(text, [
+        "未知类", "未知目标", "未收录", "未在已知类", "不是已知", "不像已知", "不属于已知", "不能稳定匹配已知",
+        "没有显示出已知", "没有显示出已知驱逐舰的专属型号标志", "没有给出具体信息", "没有给出SPY", "未给出SPY",
+        "未出现SPY", "没有出现SPY", "未出现96", "没有出现96", "没有57mm", "没有57毫米", "没有任务模块",
+        "没有57mm炮或任务模块化", "无任务模块", "普通单体船", "通用护卫", "反潜护卫",
+    ])
+
+
+def v49_13_restore_arleigh_reason(text: str, result: Dict[str, Any]) -> Tuple[bool, str]:
+    """阿利·伯克级：只有具备具体舰级锚点或很强的典型组合证据，才从 category_unknown 恢复。"""
+    if v49_13_has_explicit_unknown_or_reject(text):
+        return False, "explicit_unknown_or_counter_evidence"
+
+    cand_conf = v49_13_candidate_conf(result, "阿利·伯克级驱逐舰")
+    has_name = v49_11_has_any(text, [
+        "阿利伯克", "阿利·伯克", "伯克级", "DDG51", "DDG-51", "FlightII", "FlightIIA", "FlightIII", "Flight IIA", "Flight III",
+    ])
+    has_aegis = v49_11_has_any(text, ["宙斯盾", "Aegis"])
+    has_spy = v49_11_has_any(text, ["SPY1", "SPY-1", "SPY1D", "SPY-1D", "SPY6", "SPY-6", "AN/SPY", "ANSPY"])
+    has_mk41_or_vls = v49_11_has_any(text, [
+        "Mk41", "MK41", "Mk 41", "MK 41", "96单元", "90单元", "90-96单元", "前后垂发", "前后垂发阵列", "Mk41垂发区", "MK41垂发区",
+    ])
+    has_gun = v49_11_has_any(text, ["127mm", "127毫米", "舰艏主炮", "舰艏一门127", "船头有炮", "舰艏一门"])
+    has_hangar = v49_11_has_any(text, ["直升机机库", "后部可见直升机机库", "双机库", "两座直升机库"])
+    negative_amphib_carrier = v49_11_has_any(text, [
+        "没有全通飞行甲板", "无全通飞行甲板", "没有弹射器", "没有拦阻索", "没有坞舱", "无坞舱", "不像航母", "不像两栖登陆舰", "不像航母或两栖登陆舰",
+    ])
+
+    # 专名/型号直接恢复。
+    if has_name:
+        return True, "v49.13：文本包含阿利·伯克/DDG-51/Flight 等专名锚点，恢复为阿利·伯克级。"
+
+    # 宙斯盾/SPY/Mk41 组合属于较强舰级证据。
+    if (has_aegis or has_spy) and has_mk41_or_vls and has_gun:
+        return True, "v49.13：宙斯盾/SPY + Mk41/前后垂发 + 127mm/舰艏主炮组合证据充分，恢复为阿利·伯克级。"
+
+    # Mk41 前后垂发区 + 127mm + 机库是典型阿利·伯克结构，尤其 anchor_008 这类。
+    if has_mk41_or_vls and has_gun and has_hangar and cand_conf >= 0.74:
+        return True, "v49.13：Mk41/前后垂发 + 127mm主炮 + 直升机机库组合证据充分，恢复为阿利·伯克级。"
+
+    # v49.14：高候选分不能再从“驱逐舰类别内未知”直接恢复为阿利·伯克。
+    # 这类样本往往只有“相控阵 + 垂发 + 舰艏主炮”等共享区分特征，容易把未知驱逐舰闭集化。
+    # 仅保留一种窄场景：系统明显被航母/两栖方向误吸，但文本又排除了航母/两栖/登陆方向时，才允许纠回阿利·伯克。
+    final_cat = v49_11_final_category(result)
+    if cand_conf >= 0.86 and has_gun and negative_amphib_carrier and final_cat == "两栖舰":
+        return True, "v49.14：阿利·伯克候选置信度很高，且当前被两栖方向误吸，同时文本排除航母/两栖/登陆方向，恢复为阿利·伯克级。"
+
+    return False, "insufficient_arleigh_anchor"
+
+
+def v49_13_restore_independence_reason(text: str, result: Dict[str, Any]) -> Tuple[bool, str]:
+    """独立级：三体结构是核心锚点；57mm/RAM/MH-60/模块化作为组合辅助。"""
+    if v49_13_has_explicit_unknown_or_reject(text):
+        return False, "explicit_unknown_or_counter_evidence"
+
+    cand_conf = v49_13_candidate_conf(result, "独立级濒海战斗舰")
+    has_trimaran = v49_11_has_any(text, ["三体", "三体船", "三体舰", "宽体三体", "多体", "支撑船体", "两边像有支撑", "两边像有支撑船体"])
+    has_57 = v49_11_has_any(text, ["57mm", "57毫米", "57mm级", "57毫米级", "57mm级舰炮"])
+    has_lcs = v49_11_has_any(text, ["LCS", "濒海战斗舰", "近海作战", "濒海作战", "模块化", "任务模块", "任务模块化"])
+    has_aviation_small = v49_11_has_any(text, ["MH-60", "MH60", "2架MH-60", "两架MH-60", "直升机甲板", "舰尾平台", "后面能停直升机", "RAM", "拉姆防空"])
+    has_independence_name = v49_11_has_any(text, ["独立级", "Independence"])
+
+    if has_independence_name:
+        return True, "v49.13：文本包含独立级专名，恢复为独立级濒海战斗舰。"
+
+    # v49.14：三体船只是独立级的必要强锚点之一，但未知三体/多体护卫舰也可能共享该特征。
+    # 因此需要至少两个辅助证据，避免“未知护卫舰B”被仅凭三体/直升机甲板闭集成独立级。
+    aux_count = int(bool(has_57)) + int(bool(has_lcs)) + int(bool(has_aviation_small))
+    if has_trimaran and aux_count >= 2 and (has_57 or has_lcs):
+        return True, "v49.14：三体结构 + 至少两个独立级辅助证据（57mm/模块化/直升机或RAM等）充分，恢复为独立级濒海战斗舰。"
+
+    # 参数型独立级：75人、4300海里、57mm、RAM、MH-60 组合。
+    if has_57 and has_aviation_small and v49_11_has_any(text, ["75人", "约75人", "4300海里", "4300"]):
+        return True, "v49.14：75人/4300海里 + 57mm + RAM/MH-60 参数组合符合独立级，恢复为独立级濒海战斗舰。"
+
+    # 不再允许“高候选分 + 三体”单独恢复。三体是强锚点，但仍可能是未知护卫舰的共享区分特征。
+    if cand_conf >= 0.86 and has_trimaran and aux_count >= 2 and has_lcs:
+        return True, "v49.14：独立级候选置信度很高，且三体船 + 模块化/近海作战等组合证据充分，恢复为独立级濒海战斗舰。"
+
+    return False, "insufficient_independence_anchor"
+
+
+def v49_13_known_class_recovery_fix(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """在 v49.12 之后，窄范围恢复被过度保守拒识的真实已知类。"""
     if not isinstance(result, dict):
-        return False
+        return result
     final = result.get("final_decision") or {}
-    known = result.get("known_class_result") or {}
-    open_set = result.get("open_set_result") or {}
-    result_type = clean_text(final.get("result_type") or "")
-    primary_class = clean_text(final.get("primary_class") or "")
-    known_label = clean_text(known.get("label") or known.get("ship_class") or "") if isinstance(known, dict) else ""
-
-    if primary_class not in V49_1_UNKNOWN_LABELS:
-        return False
-    if known_label not in V49_1_UNKNOWN_LABELS:
-        return False
-    return bool(open_set.get("is_unknown", False)) or result_type in {"category_unknown", "ambiguous_category", "category_only"}
-
-
-def v49_16_surface_scores(text: str) -> Dict[str, Dict[str, Any]]:
-    """给护卫舰/驱逐舰/巡洋舰做保守的大类边界打分。只用于 category_unknown。"""
-    scores = {
-        "护卫舰": {"score": 0.0, "evidence": []},
-        "驱逐舰": {"score": 0.0, "evidence": []},
-        "巡洋舰": {"score": 0.0, "evidence": []},
-    }
-
-    def add(cat: str, value: float, ev: str):
-        scores[cat]["score"] += float(value)
-        scores[cat]["evidence"].append(ev)
-
-    nums = v49_16_number_patterns(text)
-    lengths = nums["length_m"]
-    disps = nums["displacement_t"]
-    crews = nums["crew"]
-    vls_cells = nums["vls_cells"]
-    max_len = max(lengths) if lengths else None
-    max_disp = max(disps) if disps else None
-    max_vls = max(vls_cells) if vls_cells else None
-    max_crew = max(crews) if crews else None
-
-    # 1. 显式大类词：只修大类，不恢复舰级。
-    if v49_11_has_any(text, ["大型导弹驱逐舰", "大型防空驱逐舰", "防空驱逐舰", "导弹驱逐舰"]):
-        add("驱逐舰", 9.0, "explicit_destroyer_word")
-    elif v49_11_has_any(text, ["驱逐舰"]):
-        add("驱逐舰", 6.0, "explicit_destroyer_word")
-
-    if v49_11_has_any(text, ["护卫舰", "巡防舰", "反潜护卫", "通用护卫"]):
-        add("护卫舰", 8.0, "explicit_frigate_word")
-    if v49_11_has_any(text, ["中型军舰", "中型舰艇", "中型水面舰艇", "中型水面作战舰"]):
-        add("护卫舰", 5.0, "medium_ship_word")
-    if v49_11_has_any(text, ["巡洋舰"]):
-        add("巡洋舰", 7.0, "explicit_cruiser_word")
-
-    # 2. 参数区间：这是本轮新增重点。参数只修大类，不闭集。
-    if max_disp is not None:
-        if max_disp <= 4200:
-            add("护卫舰", 8.0, f"small_displacement_{max_disp:g}t")
-        elif max_disp <= 7000:
-            add("护卫舰", 6.0, f"medium_displacement_{max_disp:g}t")
-        elif max_disp <= 10500:
-            add("驱逐舰", 5.0, f"destroyer_scale_displacement_{max_disp:g}t")
-        elif max_disp >= 11000:
-            add("巡洋舰", 5.0, f"cruiser_scale_displacement_{max_disp:g}t")
-
-    if max_len is not None:
-        if max_len <= 135:
-            add("护卫舰", 6.0, f"frigate_length_{max_len:g}m")
-        elif max_len <= 155:
-            add("护卫舰", 4.0, f"medium_frigate_length_{max_len:g}m")
-        elif max_len <= 175:
-            add("驱逐舰", 4.0, f"destroyer_length_{max_len:g}m")
-        elif max_len >= 180:
-            add("巡洋舰", 3.0, f"large_surface_length_{max_len:g}m")
-
-    if max_crew is not None:
-        if max_crew <= 180:
-            add("护卫舰", 4.0, f"small_crew_{max_crew:g}")
-        elif max_crew <= 330:
-            add("驱逐舰", 3.0, f"destroyer_crew_{max_crew:g}")
-
-    if v49_11_has_any(text, ["三千多吨", "3000多吨", "三千余吨", "3000余吨", "3650吨", "3600吨", "6200吨"]):
-        add("护卫舰", 5.0, "explicit_frigate_scale_text")
-
-    # 3. 垂发/武器传感器：共享区分特征只修大类。
-    if max_vls is not None:
-        if max_vls <= 24:
-            add("护卫舰", 5.0, f"small_vls_{max_vls:g}")
-        elif max_vls <= 48:
-            add("驱逐舰", 3.0, f"medium_vls_{max_vls:g}")
-        elif 70 <= max_vls <= 100:
-            add("驱逐舰", 7.0, f"destroyer_vls_{max_vls:g}")
-        elif max_vls >= 110:
-            add("巡洋舰", 8.0, f"cruiser_vls_{max_vls:g}")
-
-    if v49_11_has_any(text, ["90单元", "90具", "90个", "90具左右", "90单元左右", "96单元", "96具", "前后垂发", "前后甲板布置大量垂直发射"]):
-        add("驱逐舰", 6.0, "large_destroyer_vls_text")
-    if v49_11_has_any(text, ["122单元", "122具", "12组八联装", "舰队指挥"]):
-        add("巡洋舰", 6.0, "cruiser_vls_or_command_text")
-    if v49_11_has_any(text, ["16单元", "2组八联装", "两组八联装", "少量垂发", "有限垂发"]):
-        add("护卫舰", 4.0, "small_vls_text")
-
-    if v49_11_has_any(text, ["宙斯盾", "SPY", "AN/SPY", "相控阵雷达", "区域防空", "弹道导弹防御"]):
-        # 如果同时有“驱逐舰”或 90 单元级证据，偏驱逐；否则只给弱支持，避免直接闭集。
-        if scores["驱逐舰"]["score"] >= scores["巡洋舰"]["score"]:
-            add("驱逐舰", 2.5, "aegis_or_area_air_defense_shared")
-        else:
-            add("巡洋舰", 2.0, "aegis_or_area_air_defense_shared")
-
-    if v49_11_has_any(text, ["反潜直升机", "反舰导弹", "鱼雷管", "近防炮", "CODLOG", "MT30"]):
-        add("护卫舰", 2.0, "frigate_littoral_or_escort_shared")
-
-    # 4. 反向排除：小吨位/短舰体强烈排除巡洋舰；大型防空驱逐舰排除护卫舰。
-    if (max_disp is not None and max_disp <= 7000) or (max_len is not None and max_len <= 155):
-        scores["巡洋舰"]["score"] -= 4.0
-        scores["巡洋舰"]["evidence"].append("negative_for_cruiser_medium_scale")
-    if v49_11_has_any(text, ["明显大于普通护卫舰", "比普通护卫舰更大", "大型防空驱逐舰", "大型导弹驱逐舰"]):
-        scores["护卫舰"]["score"] -= 3.5
-        scores["护卫舰"]["evidence"].append("negative_for_frigate_large_destroyer_cue")
-        add("驱逐舰", 3.0, "large_destroyer_relative_cue")
-    if v49_11_has_any(text, ["不是航母", "不像航母", "没有全通飞行甲板", "无全通飞行甲板", "没有弹射器", "没有拦阻索"]):
-        # 这里不直接给水面舰加太多分，只是防止被航空母舰方向吸走时允许纠偏。
-        add("驱逐舰", 0.5, "negative_for_carrier_surface_context")
-        add("护卫舰", 0.5, "negative_for_carrier_surface_context")
-
-    for c in scores:
-        scores[c]["score"] = round(scores[c]["score"], 4)
-    return scores
-
-
-def v49_16_set_category_unknown(result: Dict[str, Any], category: str, reason: str, confidence: float, debug: Dict[str, Any]) -> Dict[str, Any]:
-    old_final = result.get("final_decision") or {}
-    result["category_result"] = {
-        "label": category,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_16_surface_parameter_category",
-        "reason": reason,
-    }
-    result["known_class_result"] = None
-    result["open_set_result"] = {
-        "is_unknown": True,
-        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
-        "reason": reason,
-    }
-    result["final_decision"] = {
-        "result_type": "category_unknown",
-        "primary_category": category,
-        "primary_class": None,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_16_surface_parameter_category_fix",
-        "message": f"最终判定：{category}类别内未知类。{reason}",
-        "alternatives": old_final.get("alternatives", {}) if isinstance(old_final, dict) else {},
-    }
-    result["v49_16_surface_parameter_category_fix"] = {"applied": True, **debug}
-    return result
-
-
-def v49_16_surface_parameter_category_fix(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """修正开放集/类别内未知结果中的护卫舰/驱逐舰/巡洋舰参数边界。"""
-    if not v49_16_is_open_category_only(result):
-        result["v49_16_surface_parameter_category_fix"] = {"applied": False, "reason": "not_open_category_only"}
+    if final.get("result_type") != "category_unknown":
+        result["v49_13_known_class_recovery_fix"] = {"applied": False, "reason": "not_category_unknown"}
         return result
 
-    final = result.get("final_decision") or {}
-    cat_res = result.get("category_result") or {}
-    current_cat = clean_text(final.get("primary_category") or cat_res.get("label") or "")
     text = v49_11_text(observed)
-    scores = v49_16_surface_scores(text)
-    ranked = sorted(scores, key=lambda c: float(scores[c]["score"]), reverse=True)
-    top_cat = ranked[0]
-    second_cat = ranked[1] if len(ranked) > 1 else ""
-    top_score = float(scores[top_cat]["score"])
-    second_score = float(scores[second_cat]["score"]) if second_cat else 0.0
-    current_score = float(scores.get(current_cat, {}).get("score", 0.0)) if current_cat in scores else 0.0
+    category = v49_11_final_category(result)
 
-    # 不处理证据太弱的样本。弱 VLM 描述如果没有参数/显式类别，继续保持原结果，避免过拟合。
-    top_ev = scores[top_cat]["evidence"]
-    has_explicit_or_parameter = any(
-        key in ev
-        for ev in top_ev
-        for key in [
-            "explicit_", "length_", "displacement_", "crew_", "vls_", "scale_text",
-            "large_destroyer_relative_cue",
-        ]
-    )
+    # 阿利·伯克：只在专属/强组合证据充分时恢复。
+    if category in {"驱逐舰", "两栖舰"}:
+        ok, reason = v49_13_restore_arleigh_reason(text, result)
+        if ok:
+            out = v49_12_set_known_class(result, "驱逐舰", "阿利·伯克级驱逐舰", reason)
+            out["final_decision"]["status"] = "v49_13_known_class_recovery_fix"
+            out["v49_13_known_class_recovery_fix"] = {"applied": True, "class_name": "阿利·伯克级驱逐舰", "reason": reason}
+            return out
 
-    allow = (
-        top_cat != current_cat
-        and top_score >= 7.0
-        and top_score - max(second_score, current_score) >= 2.5
-        and has_explicit_or_parameter
-    )
+    # 独立级：护卫舰 category_unknown 且三体/参数组合证据充分时恢复。
+    if category == "护卫舰":
+        ok, reason = v49_13_restore_independence_reason(text, result)
+        if ok:
+            out = v49_12_set_known_class(result, "护卫舰", "独立级濒海战斗舰", reason)
+            out["final_decision"]["status"] = "v49_13_known_class_recovery_fix"
+            out["v49_13_known_class_recovery_fix"] = {"applied": True, "class_name": "独立级濒海战斗舰", "reason": reason}
+            return out
 
-    debug = {
-        "reason": "surface_parameter_boundary_checked",
-        "current_category": current_cat,
-        "top_category": top_cat,
-        "second_category": second_cat,
-        "top_score": round(top_score, 4),
-        "second_score": round(second_score, 4),
-        "current_score": round(current_score, 4),
-        "top_evidence": top_ev[:12],
-        "scores": {c: scores[c]["score"] for c in scores},
-    }
-
-    if not allow:
-        result["v49_16_surface_parameter_category_fix"] = {"applied": False, **debug}
-        return result
-
-    conf = max(
-        v49_1_float(final.get("confidence", 0.0)),
-        v49_1_float(cat_res.get("confidence", 0.0)),
-        min(0.94, 0.58 + top_score / 45.0),
-    )
-    return v49_16_set_category_unknown(
-        result,
-        top_cat,
-        "v49.16：依据显式舰种词、长度/排水量/乘员/垂发数量等参数型证据，只修正水面作战舰大类，仍保持类别内未知。",
-        conf,
-        debug,
-    )
-
-
-
-# ============================================================
-# V49.18: evidence-profile guided precise known-class recovery
-# ============================================================
-
-def v49_18_has_any(text: str, terms: List[str]) -> bool:
-    return v49_11_has_any(text, terms)
-
-
-def v49_18_has_independence_negative(text: str) -> bool:
-    """明确否定独立级/三体濒海战斗舰时，不进行独立级恢复。"""
-    negatives = [
-        "不是独立级", "不像独立级", "非独立级",
-        "不是三体濒海战斗舰", "不像三体濒海战斗舰",
-        "不是三体舰", "不像三体舰", "不是三体船", "不像三体船",
-        "没有三体船结构", "未见三体船结构", "未观察到三体船结构",
-        "没有三体结构", "未见三体结构", "未观察到三体结构",
-        "没有多体结构", "未见多体结构",
-    ]
-    return v49_18_has_any(text, negatives)
-
-
-def v49_18_has_arleigh_negative(text: str) -> bool:
-    """明确否定阿利·伯克/宙斯盾驱逐舰方向，或出现强烈异类结构时，不进行阿利·伯克恢复。"""
-    negatives = [
-        "不是阿利·伯克", "不像阿利·伯克", "非阿利·伯克",
-        "不是阿利伯克", "不像阿利伯克", "非阿利伯克",
-        "无宙斯盾", "没有宙斯盾", "未见宙斯盾",
-        "无相控阵", "没有相控阵", "未见相控阵",
-        "无垂发", "没有垂发", "未见垂发",
-        "无主炮", "没有主炮", "未见主炮",
-        "三体船", "三体结构", "两边支撑船体", "支撑船体",
-        "全通飞行甲板", "弹射器", "拦阻索", "大型坞舱", "艉门",
-        "船坞登陆舰", "两栖攻击舰", "两栖船坞运输舰",
-        "122单元", "122具", "12组八联装",
-    ]
-    return v49_18_has_any(text, negatives)
-
-
-def v49_18_current_open_unknown_category(result: Dict[str, Any], category: str) -> bool:
-    """只在当前已经是该大类的 category_unknown 时做极窄恢复。"""
-    if not isinstance(result, dict):
-        return False
-    final = result.get("final_decision") or {}
-    known = result.get("known_class_result") or {}
-    open_set = result.get("open_set_result") or {}
-    current_cat = clean_text(final.get("primary_category") or (result.get("category_result") or {}).get("label") or "")
-    primary_class = clean_text(final.get("primary_class") or "")
-    known_label = clean_text(known.get("label") or known.get("ship_class") or "") if isinstance(known, dict) else ""
-    result_type = clean_text(final.get("result_type") or "")
-    if current_cat != category:
-        return False
-    if primary_class not in V49_1_UNKNOWN_LABELS:
-        return False
-    if known_label not in V49_1_UNKNOWN_LABELS:
-        return False
-    return bool(open_set.get("is_unknown", False)) or result_type == "category_unknown"
-
-
-
-# ==================== v49.19: Arleigh unknown-neighbor guard ====================
-# 目标：基于 v49.18，只修复其新增的阿利·伯克误恢复副作用。
-# 核心问题：普通 substring 匹配会把“没有机库”当成“机库”，
-# 也会把“没有给出SPY-1D或Flight IIA”当成显式强证据。
-# 因此对阿利·伯克恢复证据做“否定上下文”过滤：
-# - 非否定出现的 Mk41 / 127mm / 直升机机库 / SPY/Flight 才算正证据；
-# - 含“没有机库”“没有给出SPY/Flight”等近邻反证时，不触发恢复。
-
-
-def v49_19_find_non_negated(text: str, terms: List[str]) -> bool:
-    """查找非否定上下文中的证据词，避免把“没有X/未见X/没有给出X”当正证据。"""
-    t = str(text or "")
-    if not t:
-        return False
-    negators = [
-        "没有", "没看到", "没有看到", "未见", "未观察到", "未给出", "没有给出",
-        "无", "缺少", "不具备", "不含", "不是", "不像", "未显示", "未提及", "看不出",
-    ]
-    for term in terms:
-        term = str(term or "")
-        if not term:
-            continue
-        start = 0
-        while True:
-            idx = t.find(term, start)
-            if idx < 0:
-                break
-            left = t[max(0, idx - 12):idx]
-            local = t[max(0, idx - 12): min(len(t), idx + len(term) + 8)]
-            negated = any(neg in left or neg in local[:12] for neg in negators)
-            # “不是普通单体船”这类否定不应影响 unrelated term；这里仅过滤当前 term 的近邻。
-            if not negated:
-                return True
-            start = idx + len(term)
-    return False
-
-
-def v49_19_has_arleigh_neighbor_block(text: str) -> bool:
-    """针对未知驱逐舰近邻样本的窄反证：缺少机库或明确没有给出SPY/Flight具体信息。"""
-    t = str(text or "")
-    if not t:
-        return False
-    hard_blocks = [
-        "没有机库", "无机库", "未见机库", "未观察到机库", "没有直升机机库", "无直升机机库",
-        "没有给出SPY", "未给出SPY", "没有给出 SPY", "未给出 SPY",
-        "没有给出SPY-1D", "未给出SPY-1D",
-        "没有给出Flight", "未给出Flight", "没有给出 Flight", "未给出 Flight",
-        "没有给出Flight IIA", "未给出Flight IIA", "没有给出Flight III", "未给出Flight III",
-        "没有给出SPY-1D或Flight", "没有给出SPY-1D或Flight IIA",
-    ]
-    return v49_18_has_any(t, hard_blocks)
-
-def v49_18_arleigh_recovery_evidence(text: str) -> Tuple[bool, List[str]]:
-    """v49.19：阿利·伯克只接受非否定的显式证据或强组合证据。
-
-    关键修正：
-    - “没有机库”不能被当成“有机库”；
-    - “没有给出SPY-1D或Flight IIA”不能被当成“有SPY-1D/Flight IIA”；
-    - 仍保留 known_arleigh_burke_anchor_008 这类 Mk41 + 127mm + 直升机机库强组合恢复。
-    """
-    ev: List[str] = []
-    if v49_18_has_arleigh_negative(text):
-        return False, ["blocked_by_arleigh_negative_or_conflict"]
-
-    # 未知驱逐舰近邻保护：这些文本通常只有共享区分特征，或明确缺少阿利·伯克专属信息。
-    if v49_19_has_arleigh_neighbor_block(text):
-        return False, ["blocked_by_v49_19_arleigh_neighbor_counter_evidence"]
-
-    explicit = v49_19_find_non_negated(text, [
-        "阿利·伯克", "阿利伯克", "伯克级", "DDG-51", "DDG51",
-        "Flight IIA", "Flight III", "flight iia", "flight iii",
-    ])
-    if explicit:
-        ev.append("explicit_arleigh_name_or_hull_code_non_negated")
-        return True, ev
-
-    has_mk41 = v49_19_find_non_negated(text, [
-        "Mk41", "Mk 41", "MK41", "MK 41", "前后为Mk41", "前后 Mk41", "前后MK41"
-    ])
-    has_127 = v49_19_find_non_negated(text, ["127mm", "127毫米", "127 mm"])
-    has_hangar = v49_19_find_non_negated(text, ["直升机机库", "舰尾机库", "后部机库", "双机库", "机库"])
-    has_fore_aft = v49_19_find_non_negated(text, ["前后垂发", "前后为Mk41垂发区", "前后为 MK41 垂发区", "前后甲板", "前后垂直发射"])
-    has_aegis = v49_19_find_non_negated(text, ["宙斯盾", "Aegis", "SPY-1", "SPY-6", "AN/SPY"])
-
-    # 最安全的图像/结构组合：Mk41 + 127mm + 明确直升机机库。
-    if has_mk41 and has_127 and has_hangar:
-        ev.extend(["mk41_non_negated", "127mm_non_negated", "helicopter_hangar_non_negated"])
-        return True, ev
-
-    # 更严格的补充组合：前后垂发 + 127mm + 直升机机库 + 宙斯盾/SPY。
-    if has_fore_aft and has_127 and has_hangar and has_aegis:
-        ev.extend(["fore_aft_vls_non_negated", "127mm_non_negated", "helicopter_hangar_non_negated", "aegis_or_spy_non_negated"])
-        return True, ev
-
-    return False, ev or ["insufficient_arleigh_combo_v49_19"]
-
-
-def v49_18_independence_recovery_evidence(text: str) -> Tuple[bool, List[str]]:
-    """独立级只接受显式名称、典型参数组合，或三体/支撑船体 + 多项辅助证据。"""
-    ev: List[str] = []
-    if v49_18_has_independence_negative(text):
-        return False, ["blocked_by_independence_negative"]
-
-    explicit = v49_18_has_any(text, ["独立级", "LCS-2", "LCS 2", "Independence"])
-    if explicit:
-        ev.append("explicit_independence_name_or_hull_code")
-        return True, ev
-
-    has_75 = v49_18_has_any(text, ["75人", "75 人", "约75人", "乘员约75"])
-    has_4300 = v49_18_has_any(text, ["4300海里", "4300 海里"])
-    has_57 = v49_18_has_any(text, ["57mm", "57毫米", "57 mm"])
-    has_ram = v49_18_has_any(text, ["RAM", "拉姆"])
-    has_mh60 = v49_18_has_any(text, ["MH-60", "MH60"])
-    if has_75 and has_4300 and has_57 and (has_ram or has_mh60):
-        ev.extend(["crew_75", "range_4300nm", "57mm", "ram_or_mh60"])
-        return True, ev
-
-    has_trihull = v49_18_has_any(text, [
-        "三体船", "三体结构", "三体舰", "三体船轮廓", "多体结构",
-        "左右支撑结构", "两边支撑船体", "支撑船体", "不是普通单体船",
-    ])
-    aux = []
-    if has_57 or v49_18_has_any(text, ["小口径舰炮", "一门小炮", "船头有一门小炮", "57mm级舰炮"]):
-        aux.append("57mm_or_small_gun")
-    if v49_18_has_any(text, ["直升机平台", "直升机甲板", "停直升机", "宽舰尾平台", "舰尾平台", "后面能停直升机"]):
-        aux.append("helicopter_or_wide_stern_platform")
-    if v49_18_has_any(text, ["模块化", "任务模块", "濒海作战", "近海作战", "高速近海", "速度很快"]):
-        aux.append("mission_module_or_littoral_high_speed")
-    if has_ram or has_mh60:
-        aux.append("ram_or_mh60")
-
-    # 三体/支撑船体 + 至少两项辅助证据，避免未知三体/相似护卫舰被误闭集。
-    if has_trihull and len(set(aux)) >= 2:
-        ev.append("trihull_or_supporting_hulls")
-        ev.extend(sorted(set(aux)))
-        return True, ev
-
-    return False, ev or ["insufficient_independence_combo"]
-
-
-def v49_18_set_known_class(
-    result: Dict[str, Any],
-    category: str,
-    known_class: str,
-    confidence: float,
-    reason: str,
-    evidence: List[str],
-) -> Dict[str, Any]:
-    old_final = result.get("final_decision") or {}
-    result["category_result"] = {
-        "label": category,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_18_precise_known_recovery",
-        "reason": reason,
-    }
-    result["known_class_result"] = {
-        "label": known_class,
-        "ship_class": known_class,
+    result["v49_13_known_class_recovery_fix"] = {
+        "applied": False,
+        "reason": "no_strong_known_class_recovery_evidence",
         "category": category,
-        "confidence": round(float(confidence), 4),
-        "known_status": "Known",
-        "status": "v49_18_precise_known_recovery",
-        "reason": reason,
-    }
-    result["open_set_result"] = {
-        "is_unknown": False,
-        "unknown_scope": None,
-        "reason": reason,
-    }
-    result["final_decision"] = {
-        "result_type": "known_class",
-        "primary_category": category,
-        "primary_class": known_class,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_18_precise_known_recovery",
-        "message": f"最终判定：{category} / {known_class}。{reason}",
-        "alternatives": old_final.get("alternatives", {}) if isinstance(old_final, dict) else {},
-    }
-    result["v49_18_precise_known_recovery"] = {
-        "applied": True,
-        "category": category,
-        "known_class": known_class,
-        "evidence": evidence,
-        "reason": reason,
     }
     return result
-
-
-def v49_18_precise_known_recovery(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    v49.18：基于 evidence_profile 的极窄 known-class 恢复。
-    只恢复强组合/显式名称证据，不恢复仅共享区分特征。
-    """
-    text = v49_11_text(observed)
-    # 文本明确 unknown / 未收录 / 非已知时，不做已知类恢复。
-    if v49_18_has_any(text, ["未知类", "类别内未知", "未收录", "非已知", "不是已知", "不像已知", "未知驱逐舰", "未知护卫舰"]):
-        result["v49_18_precise_known_recovery"] = {"applied": False, "reason": "explicit_unknown_text"}
-        return result
-
-    if v49_18_current_open_unknown_category(result, "驱逐舰"):
-        ok, ev = v49_18_arleigh_recovery_evidence(text)
-        if ok:
-            conf = max(
-                v49_1_float((result.get("final_decision") or {}).get("confidence", 0.0)),
-                0.91,
-            )
-            return v49_18_set_known_class(
-                result,
-                "驱逐舰",
-                "阿利·伯克级驱逐舰",
-                conf,
-                "v49.18：当前为驱逐舰类别内未知，但文本具备阿利·伯克级显式名称或 Mk41+127mm+直升机机库等强组合证据，且无强反证，安全恢复为已知舰级。",
-                ev,
-            )
-
-    if v49_18_current_open_unknown_category(result, "护卫舰"):
-        ok, ev = v49_18_independence_recovery_evidence(text)
-        if ok:
-            conf = max(
-                v49_1_float((result.get("final_decision") or {}).get("confidence", 0.0)),
-                0.90,
-            )
-            return v49_18_set_known_class(
-                result,
-                "护卫舰",
-                "独立级濒海战斗舰",
-                conf,
-                "v49.18：当前为护卫舰类别内未知，但文本具备独立级显式名称、典型参数组合或三体结构+多项辅助证据，且无强反证，安全恢复为已知舰级。",
-                ev,
-            )
-
-    result["v49_18_precise_known_recovery"] = {"applied": False, "reason": "no_safe_recovery_evidence"}
-    return result
-
 
 
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """v49.19：在 v49.18 基础上，给阿利·伯克恢复逻辑增加未知驱逐舰近邻保护。"""
+    """v49.14：在 v49.12 基础上，更保守地恢复阿利·伯克/独立级，避免未知类重新闭集化。"""
     result = _hierarchical_class_match_v49_12_base(class_data_path, observed_attributes)
-    result = v49_16_surface_parameter_category_fix(result, observed_attributes)
-    result = v49_18_precise_known_recovery(result, observed_attributes)
-    result["v49_19_arleigh_unknown_neighbor_guard"] = {"version": "v49.19", "note": "arleigh recovery uses non-negated evidence matching"}
+    result = v49_13_known_class_recovery_fix(result, observed_attributes)
     return result
-
 
 if __name__ == "__main__":
     asyncio.run(main())

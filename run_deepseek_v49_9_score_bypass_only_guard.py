@@ -1586,6 +1586,233 @@ def build_final_decision(
         },
     }
 
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -1895,6 +2122,233 @@ def category_single_known_class(category: Optional[str]) -> Optional[str]:
     if len(classes) == 1:
         return classes[0]
     return None
+
+
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
 
 
 def hierarchical_class_match(
@@ -2516,6 +2970,233 @@ def v9_rebuild_final(result: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -2732,6 +3413,233 @@ def v11_infer_known_by_single_category(raw_text: str, category: str) -> Optional
     return None
 
 
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -2902,6 +3810,233 @@ def v12_best_class_from_raw(raw_text: str) -> Tuple[Optional[str], Optional[str]
 
 def v12_set_known(result: Dict[str, Any], category: str, class_name: str, reason: str, min_conf: float = 0.58) -> Dict[str, Any]:
     return v11_set_known_class_result(result, category, class_name, reason, min_conf=min_conf)
+
+
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
 
 
 def hierarchical_class_match(
@@ -3093,6 +4228,233 @@ def v13_enforce_output_consistency(match_result: Dict[str, Any]) -> Dict[str, An
         return v13_fill_known_class(match_result, category, class_name, reason)
 
     return match_result
+
+
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
 
 
 def hierarchical_class_match(
@@ -3374,6 +4736,233 @@ def v26_enforce_known_only_less_aggressive(result: Dict[str, Any], observed_attr
     return result
 
 
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -3588,6 +5177,233 @@ def v27_enforce_known_only_balanced(result: Dict[str, Any], observed_attributes:
 
 
 # 覆盖前一版 hierarchical_class_match。
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -3874,6 +5690,233 @@ def v28_enforce_known_only_less_open(result: Dict[str, Any], observed_attributes
 
 
 # 覆盖前一版 hierarchical_class_match。
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -4190,6 +6233,233 @@ def v29_enforce_slot_based_known_only(result: Dict[str, Any], observed: Dict[str
 
 
 # 覆盖前一版 hierarchical_class_match。
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -4498,6 +6768,233 @@ def v31_enforce_category_first_slot_based(result: Dict[str, Any], observed: Dict
 
 
 # 覆盖 v29 hierarchical_class_match。
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -4845,6 +7342,233 @@ def v32_enforce_category_lock_and_amphibious_fix(result: Dict[str, Any], observe
 
 
 # 覆盖 v31 hierarchical_class_match。
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -4993,6 +7717,233 @@ def v32_should_force_unknown(chosen_cat: str, known_cls: Optional[str], observed
 
 
 # 覆盖 v34 hierarchical_class_match，复用 v32_enforce，但其内部调用的 category_scores/direct/force_unknown 已被 v35 覆盖。
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
@@ -5070,6 +8021,233 @@ def v47_sync_final_decision_if_known(match_result: Dict[str, Any]) -> Dict[str, 
         match_result["v47_final_decision_sync"] = {"applied": False, "reason": "final_decision 已经同步。"}
 
     return match_result
+
+
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
 
 
 def hierarchical_class_match(
@@ -5277,6 +8455,233 @@ def v48_promote_arleigh_if_safe(result: Dict[str, Any], observed: Dict[str, Dict
 
 
 _hierarchical_class_match_v47_sync_base = hierarchical_class_match
+
+
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
 
 
 def hierarchical_class_match(
@@ -6221,11 +9626,238 @@ def v49_7_fix_category_only(match_result: Dict[str, Any], observed_attributes: O
     }
     return match_result
 
+
+# ==================== v49.9: score-bypass promotion guard for shared distinguishing features ====================
+# 目的：
+# - v49.8 的错误在于“最终 known_class 回退”作用范围太大，误伤真实已知类。
+# - v49.9 不再回退所有 known_class，只处理 v49.1/v49.3 里“由 score_bypass 提升”的候选。
+# - score_bypass 的含义是：没有通过具体舰级锚点，仅靠高分/高证据数绕过；
+#   这正是“共享区分特征被当成独有强锚点”的主要来源。
+# - 因此：只要是 open-set 状态下靠 score_bypass 被提升成阿利·伯克/独立级，且文本中没有具体舰级锚点，
+#   就回退成该大类类别内未知。这样不会动 v49 原本明确的 known_class_result。
+
+
+def v49_9_text_blob(observed: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    return v49_3_observed_to_text(observed)
+
+
+def v49_9_has_any(text: str, cues: List[str]) -> bool:
+    return v49_3_has_any(text, cues)
+
+
+def v49_9_final_known_label(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    return clean_text(
+        final.get("primary_class")
+        or known.get("label")
+        or known.get("ship_class")
+        or ""
+    )
+
+
+def v49_9_final_category(match_result: Dict[str, Any]) -> str:
+    final = match_result.get("final_decision") or {}
+    known = match_result.get("known_class_result") or {}
+    category = match_result.get("category_result") or {}
+    return clean_text(
+        final.get("primary_category")
+        or known.get("category")
+        or category.get("label")
+        or ""
+    )
+
+
+def v49_9_specific_anchor_present(label: str, observed: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, List[str]]:
+    """
+    判断是否存在“具体舰级锚点”。
+    注意：这里不把相控阵、垂发、舰艏主炮、近海作战这类共享区分特征当成具体舰级锚点。
+    """
+    text = v49_9_text_blob(observed)
+    label = clean_text(label)
+    matched: List[str] = []
+
+    if label == "阿利·伯克级驱逐舰":
+        groups = {
+            "exact_name": ["阿利伯克", "阿利·伯克", "伯克级", "Arleigh Burke", "DDG-51", "DDG51"],
+            "aegis_or_spy": ["宙斯盾", "Aegis", "SPY-1", "SPY1", "SPY-6", "SPY6", "AN/SPY"],
+            "mk41_or_90_96_vls": ["Mk41", "MK41", "MK-41", "90单元", "96单元", "90-96", "90至96", "垂直发射单元90", "垂直发射单元96"],
+            "flight_batch": ["Flight IIA", "FlightIIA", "Flight III", "FlightIII"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    if label == "独立级濒海战斗舰":
+        groups = {
+            "exact_name": ["独立级", "Independence", "LCS-2"],
+            # 独立级最关键的是三体船。LCS/近海/模块化/57mm 只能作为共享或组合特征，
+            # 没有三体船时，不允许 open-set 样本仅靠高分闭集成独立级。
+            "trimaran": ["三体船", "三体结构", "三体舰", "宽体三体", "trimaran"],
+        }
+        for group, cues in groups.items():
+            if v49_9_has_any(text, cues):
+                matched.append(group)
+        return bool(matched), matched
+
+    return True, ["not_in_scope"]
+
+
+def v49_9_demote_to_category_unknown(
+    match_result: Dict[str, Any],
+    category: str,
+    label: str,
+    reason: str,
+    debug: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    category = clean_text(category) or get_category_of_known_class(label) or "未知"
+    final = match_result.get("final_decision") or {}
+
+    old_alts = final.get("alternatives") if isinstance(final, dict) else None
+    if not old_alts:
+        old_alts = {
+            "top_categories": match_result.get("category_candidates", [])[:FINAL_TOPK],
+            "top_known_classes": match_result.get("known_class_candidates", [])[:FINAL_TOPK],
+        }
+
+    match_result["category_result"] = {
+        "label": category,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard_category_unknown",
+        "reason": reason,
+    }
+
+    # 必须清空 known_class_result，否则 replay 的 synthesize_prediction 会回退读取 known_class_result。
+    match_result["known_class_result"] = {}
+
+    match_result["open_set_result"] = {
+        "is_unknown": True,
+        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
+        "reason": reason,
+    }
+
+    match_result["final_decision"] = {
+        "result_type": "category_unknown",
+        "primary_category": category,
+        "primary_class": None,
+        "confidence": final.get("confidence", 0.0),
+        "status": "v49_9_shared_feature_guard",
+        "message": f"最终判定：{category}类别内未知类。{reason}",
+        "alternatives": old_alts,
+    }
+
+    match_result["v49_9_shared_feature_promotion_guard"] = {
+        "applied": True,
+        "action": "demote_score_bypass_known_to_category_unknown",
+        "label": label,
+        "category": category,
+        "reason": reason,
+        **(debug or {}),
+    }
+    return match_result
+
+
+def v49_9_shared_feature_promotion_guard(
+    match_result: Dict[str, Any],
+    observed_attributes: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    只处理 v49.1/v49.3 由 score_bypass 提升的结果。
+    不处理：
+    - 原本已经明确的 known_class_result；
+    - 通过 exact_name 或核心锚点提升的结果；
+    - 非阿利·伯克/独立级的结果。
+    """
+    if not isinstance(match_result, dict):
+        return match_result
+
+    promotion = match_result.get("v49_1_top_candidate_promotion") or {}
+    gate = match_result.get("v49_3_open_set_promotion_gate") or {}
+
+    applied = bool(promotion.get("applied", False))
+    anchor_reason = clean_text(
+        promotion.get("v49_3_anchor_reason")
+        or gate.get("reason")
+        or ""
+    )
+    open_set_was_unknown = bool(promotion.get("open_set_is_unknown", False))
+
+    label = v49_9_final_known_label(match_result)
+    category = v49_9_final_category(match_result)
+
+    debug = {
+        "promotion_applied": applied,
+        "anchor_reason": anchor_reason,
+        "open_set_was_unknown": open_set_was_unknown,
+        "top_confidence": promotion.get("top_confidence"),
+        "margin": promotion.get("margin"),
+        "matched_evidence_count": promotion.get("matched_evidence_count"),
+        "conflict_count": promotion.get("conflict_count"),
+    }
+
+    if not applied:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_v49_1_promoted_result",
+            **debug,
+        }
+        return match_result
+
+    if not open_set_was_unknown:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_open_set_promotion",
+            **debug,
+        }
+        return match_result
+
+    if anchor_reason != "very_strong_candidate_score_bypass":
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "not_score_bypass_promotion",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    if label not in {"阿利·伯克级驱逐舰", "独立级濒海战斗舰"}:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "label_not_in_shared_feature_guard_scope",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    has_anchor, matched_anchors = v49_9_specific_anchor_present(label, observed_attributes)
+    debug["matched_specific_anchors"] = matched_anchors
+
+    if has_anchor:
+        match_result["v49_9_shared_feature_promotion_guard"] = {
+            "applied": False,
+            "reason": "specific_known_class_anchor_present",
+            "label": label,
+            "category": category,
+            **debug,
+        }
+        return match_result
+
+    reason = (
+        "v49.9：该结果是 open-set 状态下由 very_strong_candidate_score_bypass 提升得到，"
+        "但文本/卡槽中缺少具体舰级独有强锚点；当前证据更像共享区分特征，"
+        "只支持大类，不足以闭集到具体已知舰级。"
+    )
+    return v49_9_demote_to_category_unknown(match_result, category, label, reason, debug)
+
+
 def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """v49.7：基于 v49.3，五类证据只修 category_unknown 的大类，不恢复 known_class。"""
+    """v49.9：基于 v49.7，只约束 score_bypass 的 open-set 候选提升，不再回退所有 known_class。"""
     result = _hierarchical_class_match_v48_base(class_data_path, observed_attributes)
 
     # 先保留 v49：known_class_result 明确时，强制 final_decision 与其一致。
@@ -6235,1053 +9867,12 @@ def hierarchical_class_match(
     # 如果原本是 open-set，再追加 v49.3 的候选提升确认门。
     result = v49_1_promote_top_candidate_when_safe(result, observed_attributes)
 
+    # v49.9：只处理“open-set + score_bypass 提升”的阿利·伯克/独立级候选，
+    # 避免共享区分特征被当成独有强锚点；不动原本明确的 known_class。
+    result = v49_9_shared_feature_promotion_guard(result, observed_attributes)
+
     # 最后执行 v49.7：只修类别内未知的大类边界，不补具体已知舰级。
     result = v49_7_fix_category_only(result, observed_attributes)
-    return result
-
-
-
-# ==================== v49.11: counter-evidence guard for accidental closed-set fill ====================
-# 目标：基于 v49.7，不再扩大候选提升范围，只修复一个已确认路径：
-# 部分 open-set 样本不是通过 v49_1 promotion 进入 known_class，
-# 而是被 v48_promoted_arleigh 或 single_known_class_filled 过早闭集成已知舰级。
-# 本补丁只在“最终已经是 known_class，且文本中存在明确反证/缺少专属锚点提示”时，
-# 将其回退为类别内未知类；不恢复其他 known_class，不修改 schema_config。
-
-_hierarchical_class_match_v49_7_base = hierarchical_class_match
-
-
-def v49_11_text(observed: Dict[str, Dict[str, Any]]) -> str:
-    """把 raw_text 和所有槽位值拼成一个可检索文本。"""
-    parts = [get_raw_text_from_observed(observed)]
-    try:
-        for group, slots in observed.items():
-            if str(group).startswith("_") or not isinstance(slots, dict):
-                continue
-            for _slot, value in slots.items():
-                if isinstance(value, list):
-                    parts.extend(str(x) for x in value)
-                else:
-                    parts.append(str(value))
-    except Exception:
-        pass
-    return " ".join(x for x in parts if x)
-
-
-def v49_11_has_any(text: str, terms: List[str]) -> bool:
-    c = compact_key(text)
-    return any(compact_key(t) in c for t in terms if t)
-
-
-def v49_11_final_class(result: Dict[str, Any]) -> str:
-    final = result.get("final_decision") or {}
-    known = result.get("known_class_result") or {}
-    return clean_text(final.get("primary_class") or known.get("label") or known.get("ship_class") or "")
-
-
-def v49_11_final_category(result: Dict[str, Any]) -> str:
-    final = result.get("final_decision") or {}
-    cat = result.get("category_result") or {}
-    known = result.get("known_class_result") or {}
-    return clean_text(final.get("primary_category") or cat.get("label") or known.get("category") or "")
-
-
-def v49_11_final_status(result: Dict[str, Any]) -> str:
-    final = result.get("final_decision") or {}
-    return clean_text(final.get("status") or "")
-
-
-def v49_11_set_category_unknown(result: Dict[str, Any], category: str, reason: str, confidence: Optional[float] = None) -> Dict[str, Any]:
-    """把已知类回退为 category_unknown，保留大类，不给具体舰级。"""
-    old_cat = result.get("category_result") or {}
-    old_final = result.get("final_decision") or {}
-    conf = confidence
-    if conf is None:
-        conf = max(
-            v49_1_float(old_cat.get("confidence", 0.0)),
-            v49_1_float(old_final.get("confidence", 0.0)),
-            0.55,
-        )
-    result["category_result"] = {
-        "label": category,
-        "confidence": round(float(conf), 4),
-        "status": "v49_11_closed_set_guard_category_unknown",
-        "reason": reason,
-    }
-    result["known_class_result"] = None
-    result["open_set_result"] = {
-        "is_unknown": True,
-        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
-        "reason": reason,
-    }
-    result["final_decision"] = {
-        "result_type": "category_unknown",
-        "primary_category": category,
-        "primary_class": None,
-        "confidence": round(float(conf), 4),
-        "status": "v49_11_closed_set_guard",
-        "message": f"最终判定：{category}类别内未知类。{reason}",
-        "alternatives": old_final.get("alternatives", {}) if isinstance(old_final, dict) else {},
-    }
-    result["v49_11_closed_set_guard"] = {
-        "applied": True,
-        "category": category,
-        "reason": reason,
-    }
-    return result
-
-
-def v49_11_category_for_arleigh_reject(text: str) -> str:
-    """阿利·伯克误闭集时，按文本更像的方向保留大类。"""
-    # 这些更像护卫舰/中小型水面舰，不应继续留在驱逐舰大类。
-    if v49_11_has_any(text, [
-        "护卫舰", "巡防舰", "反潜护卫", "通用护卫", "中型军舰", "中型舰艇",
-        "三千多吨", "3000吨", "3600吨", "3650吨", "6200吨", "151m", "151米",
-        "有限垂发", "少量垂发", "少量垂直发射", "不像大型区域防空舰",
-    ]):
-        return "护卫舰"
-    return "驱逐舰"
-
-
-def v49_11_should_reject_arleigh(text: str, status: str, confidence: float) -> Tuple[bool, str, str]:
-    """判断阿利·伯克是否只是由共享区分特征误闭集。"""
-    has_named_anchor = v49_11_has_any(text, [
-        "阿利伯克", "阿利·伯克", "伯克级", "DDG51", "DDG-51", "FlightII", "FlightIIA", "FlightIII", "Flight IIA", "Flight III",
-    ])
-    has_system_anchor = v49_11_has_any(text, [
-        "SPY1", "SPY-1", "SPY1D", "SPY-1D", "SPY6", "SPY-6", "AN/SPY", "ANSPY",
-        "Mk41", "MK41", "Mk 41", "MK 41", "96单元", "90具", "90单元", "90-96单元",
-    ])
-    # 宙斯盾是较强线索，但在未知驱逐舰中也可能出现；若同时存在强反证，不允许闭集。
-    has_aegis = v49_11_has_any(text, ["宙斯盾", "Aegis"])
-
-    explicit_missing_anchor = v49_11_has_any(text, [
-        "没有给出SPY", "未给出SPY", "没有给出SPY1", "没有给出SPY-1", "没有给出Flight", "未给出Flight",
-        "未出现96", "没有出现96", "未出现SPY", "没有出现SPY", "未出现SPY1D", "未出现SPY-1D",
-        "未出现两座直升机库", "没有两座直升机库", "没有给出具体信息", "没有显示出已知驱逐舰的专属型号标志",
-        "没有显示出已知", "没有具体雷达型号", "具体雷达型号看不清",
-    ])
-    counter_evidence = v49_11_has_any(text, [
-        "没有机库", "无机库", "无直升机机库", "未观察到直升机库", "没有真正的直升机库", "舰尾只有直升机平台",
-        "传统重型四角格子桅杆", "四角格子", "格子桅", "格子结构",
-        "有限垂发", "少量垂发", "少量垂直发射", "不像大型区域防空舰",
-        "16单元", "12组八联装", "76毫米", "三千多吨", "3600吨", "3000吨",
-    ])
-
-    # v48_promoted_arleigh 本来就是补丁强推，要求更严格。
-    if status == "v48_promoted_arleigh":
-        if explicit_missing_anchor or counter_evidence:
-            return True, v49_11_category_for_arleigh_reject(text), "v49.11：v48 阿利·伯克补全遇到明确缺失锚点/反证，回退为类别内未知。"
-        if not (has_named_anchor or has_system_anchor):
-            return True, v49_11_category_for_arleigh_reject(text), "v49.11：v48 阿利·伯克补全只依赖共享区分特征，缺少舰级专属锚点。"
-
-    # single_known_class_filled 属于单已知大类补全，也不能在明确缺失锚点时闭集。
-    if status == "single_known_class_filled":
-        if explicit_missing_anchor:
-            return True, v49_11_category_for_arleigh_reject(text), "v49.11：文本明确说明缺少阿利·伯克级专属锚点，取消单已知舰级补全。"
-        if counter_evidence and not has_named_anchor:
-            return True, v49_11_category_for_arleigh_reject(text), "v49.11：阿利·伯克补全存在结构/规模/火力反证，回退为类别内未知。"
-        # 低中置信度且只有共享区分特征时，不闭集。
-        if confidence < 0.72 and not (has_named_anchor or has_system_anchor or has_aegis):
-            return True, "驱逐舰", "v49.11：阿利·伯克单类补全置信度不足且缺少专属锚点。"
-
-    return False, "", ""
-
-
-def v49_11_should_reject_independence(text: str, status: str, confidence: float) -> Tuple[bool, str, str]:
-    """判断独立级是否缺少三体/模块化等关键锚点。"""
-    has_trimaran = v49_11_has_any(text, ["三体", "多体", "支撑船体", "两边像有支撑", "宽体三体"])
-    explicit_counter = v49_11_has_any(text, [
-        "没有57mm", "没有57毫米", "没有任务模块", "没有模块化", "没有57mm炮", "没有57毫米炮",
-        "没有57mm炮或任务模块化", "没有任务模块化濒海舰特征", "无任务模块", "无57mm",
-        "普通单体船", "单体船", "16单元", "127毫米", "通用护卫", "反潜护卫",
-    ])
-    # 独立级闭集最关键的是三体结构；如果文本明确否定 57mm/任务模块/三体方向，必须保留护卫舰未知。
-    if explicit_counter:
-        return True, "护卫舰", "v49.11：文本存在独立级反证，取消独立级闭集补全。"
-    # 对低置信度的单类补全，若没有三体锚点，也不闭集。
-    if status == "single_known_class_filled" and confidence < 0.62 and not has_trimaran:
-        return True, "护卫舰", "v49.11：独立级单类补全置信度较低且缺少三体船锚点。"
-    return False, "", ""
-
-
-def v49_11_should_reject_wasp(text: str, status: str, confidence: float) -> Tuple[bool, str, str]:
-    """判断黄蜂级是否被普通直升机/飞行甲板误闭集。"""
-    no_amphibious = v49_11_has_any(text, [
-        "未观察到全通飞行甲板", "未见全通飞行甲板", "没有全通飞行甲板", "无全通飞行甲板",
-        "未观察到坞舱", "未见坞舱", "没有坞舱", "无坞舱",
-        "未观察到大型登陆艇", "没有大型登陆艇", "无大型登陆艇", "未观察到大型登陆艇收放结构",
-    ])
-    frigate_like = v49_11_has_any(text, ["体量中等", "中型", "76毫米", "护卫舰", "中前部", "烟囱"])
-    if no_amphibious and frigate_like:
-        return True, "护卫舰", "v49.11：文本明确排除全通飞行甲板/坞舱/大型登陆艇，且更像中型护卫舰。"
-    return False, "", ""
-
-
-def v49_11_closed_set_counter_evidence_guard(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    if not isinstance(result, dict):
-        return result
-    final = result.get("final_decision") or {}
-    if final.get("result_type") != "known_class" or not final.get("primary_class"):
-        result["v49_11_closed_set_guard"] = {"applied": False, "reason": "not_known_class"}
-        return result
-
-    class_name = v49_11_final_class(result)
-    category = v49_11_final_category(result)
-    status = v49_11_final_status(result)
-    confidence = v49_1_float(final.get("confidence", 0.0))
-    text = v49_11_text(observed)
-
-    # 只处理已经确认的误闭集高发路径，避免像 v49.8 一样误伤大量正常已知类。
-    if class_name == "阿利·伯克级驱逐舰" and status in {"v48_promoted_arleigh", "single_known_class_filled"}:
-        reject, new_cat, reason = v49_11_should_reject_arleigh(text, status, confidence)
-        if reject:
-            return v49_11_set_category_unknown(result, new_cat or "驱逐舰", reason)
-
-    if class_name == "独立级濒海战斗舰" and status in {"single_known_class_filled", "v47_synced_known_class", "single_best"}:
-        reject, new_cat, reason = v49_11_should_reject_independence(text, status, confidence)
-        if reject:
-            return v49_11_set_category_unknown(result, new_cat or "护卫舰", reason)
-
-    if class_name == "黄蜂级两栖攻击舰" and status == "single_known_class_filled":
-        reject, new_cat, reason = v49_11_should_reject_wasp(text, status, confidence)
-        if reject:
-            return v49_11_set_category_unknown(result, new_cat or "两栖舰", reason)
-
-    result["v49_11_closed_set_guard"] = {
-        "applied": False,
-        "reason": "no_counter_evidence_triggered",
-        "class_name": class_name,
-        "status": status,
-        "confidence": round(confidence, 4),
-    }
-    return result
-
-
-def hierarchical_class_match(
-    class_data_path: str,
-    observed_attributes: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
-    """v49.11：基于 v49.7，针对 v48/single-known 补全路径增加反证保护。"""
-    result = _hierarchical_class_match_v49_7_base(class_data_path, observed_attributes)
-    result = v49_11_closed_set_counter_evidence_guard(result, observed_attributes)
-    return result
-
-
-
-# ==================== v49.12: amphibious / landing known-class boundary fix ====================
-# 目标：基于 v49.11，处理黄蜂级、圣安东尼奥级、惠德比岛级之间的边界混淆。
-# 约束：不改前面已经修好的 open-set 保护逻辑，只在两栖/登陆三类之间做窄范围纠偏。
-# 核心思想：
-# 1. 黄蜂级：全通/贯通飞行甲板、两栖攻击、航空突击、STOVL/垂直起降。
-# 2. 圣安东尼奥级：LPD/船坞运输、前部大型上层建筑、直升机平台/机库、车辆/货物/人员综合运输，且不是纯船坞登陆舰。
-# 3. 惠德比岛级：LSD/船坞登陆、登陆艇投送为主、大型坞舱/艉门/登陆艇收放，且明确没有全通飞行甲板/STOVL。
-
-_hierarchical_class_match_v49_11_base = hierarchical_class_match
-
-
-def v49_12_text_flags(text: str) -> Dict[str, bool]:
-    """两栖/登陆边界判定用的文本证据。"""
-    no_full_deck = v49_11_has_any(text, [
-        "不像全通甲板两栖攻击舰", "不是全通甲板两栖攻击舰", "不像全通飞行甲板",
-        "不是全通飞行甲板", "没有全通飞行甲板", "未见全通飞行甲板", "未观察到全通飞行甲板", "无全通飞行甲板",
-        "没有看到航母那种贯通大甲板", "不像航母那种整条飞行甲板", "没有看到航母那种整条飞行甲板",
-        "没有STOVL", "无STOVL", "没有短距起飞", "没有垂直降落", "没有垂直起降", "也没有STOVL",
-    ])
-    full_deck_positive = (not no_full_deck) and v49_11_has_any(text, [
-        "全通飞行甲板", "全通甲板", "贯通甲板", "整条飞行甲板", "类似小型航空母舰", "小型航母", "直通甲板",
-    ])
-    st0vl_positive = (not no_full_deck) and v49_11_has_any(text, [
-        "STOVL", "短距起飞", "垂直降落", "垂直起降", "AV-8B", "F-35B", "垂直/短距", "短距/垂直",
-    ])
-    wasp_mission = v49_11_has_any(text, [
-        "两栖攻击舰", "两栖攻击任务", "两栖攻击", "航空突击", "远征部队核心平台", "海军陆战队远征部队核心平台",
-    ])
-
-    stern_opening = v49_11_has_any(text, [
-        "艉门", "舰尾开口", "船尾开口", "尾部开口", "大型开口", "舰艉区域可见大型开口", "船尾似乎能打开", "船尾能打开",
-    ])
-    well_deck = v49_11_has_any(text, [
-        "坞舱", "大型坞舱", "船坞", "船坞登陆平台", "登陆艇收放", "登陆艇进出", "登陆艇投送", "气垫登陆艇", "LCAC",
-    ])
-    landing_primary = v49_11_has_any(text, [
-        "登陆艇投送为主", "以登陆艇投送为主", "主要能看到船坞登陆平台", "船坞登陆舰", "LSD", "惠德比", "船坞登陆",
-    ])
-
-    large_superstructure = v49_11_has_any(text, [
-        "前部上层建筑很大", "前面有很大的方盒子", "方盒子一样的舰桥", "大型上层建筑", "大型箱形上层建筑", "前部是大型上层建筑",
-        "大型运输舰", "大型两栖运输", "大型运输平台",
-    ])
-    heli_platform_or_hangar = v49_11_has_any(text, [
-        "直升机平台", "直升机甲板", "直升机机库", "机库", "后面有直升机平台", "后部有直升机平台", "后面有直升机甲板",
-    ])
-    transport_space = v49_11_has_any(text, [
-        "车辆/货物运输", "车辆货物运输", "车辆/货物运输空间", "车辆甲板", "货物运输", "人员运输", "运兵", "运输空间", "综合运输",
-    ])
-    lpd_positive = v49_11_has_any(text, [
-        "圣安东尼奥", "LPD", "两栖船坞运输舰", "船坞运输舰", "两栖船坞运输", "不是纯船坞登陆舰", "不像纯船坞登陆舰",
-    ])
-    pure_landing_negative_for_lpd = v49_11_has_any(text, [
-        "纯船坞登陆舰", "登陆艇投送为主", "以登陆艇投送为主", "主要能看到船坞登陆平台",
-    ]) and not v49_11_has_any(text, ["不是纯船坞登陆舰", "不像纯船坞登陆舰"])
-
-    return {
-        "no_full_deck": no_full_deck,
-        "full_deck_positive": full_deck_positive,
-        "stovl_positive": st0vl_positive,
-        "wasp_mission": wasp_mission,
-        "stern_opening": stern_opening,
-        "well_deck": well_deck,
-        "landing_primary": landing_primary,
-        "large_superstructure": large_superstructure,
-        "heli_platform_or_hangar": heli_platform_or_hangar,
-        "transport_space": transport_space,
-        "lpd_positive": lpd_positive,
-        "pure_landing_negative_for_lpd": pure_landing_negative_for_lpd,
-    }
-
-
-def v49_12_set_known_class(result: Dict[str, Any], category: str, class_name: str, reason: str, confidence: Optional[float] = None) -> Dict[str, Any]:
-    old_final = result.get("final_decision") or {}
-    old_cat = result.get("category_result") or {}
-    conf = confidence
-    if conf is None:
-        conf = max(
-            v49_1_float(old_final.get("confidence", 0.0)),
-            v49_1_float(old_cat.get("confidence", 0.0)),
-            0.88,
-        )
-    result["category_result"] = {
-        "label": category,
-        "confidence": round(float(conf), 4),
-        "status": "v49_12_amphibious_landing_boundary_category",
-        "reason": reason,
-    }
-    result["known_class_result"] = {
-        "label": class_name,
-        "ship_class": class_name,
-        "category": category,
-        "confidence": round(float(conf), 4),
-        "known_status": "Known",
-        "reason": reason,
-    }
-    result["open_set_result"] = {
-        "is_unknown": False,
-        "unknown_scope": None,
-        "reason": reason,
-    }
-    result["final_decision"] = {
-        "result_type": "known_class",
-        "primary_category": category,
-        "primary_class": class_name,
-        "confidence": round(float(conf), 4),
-        "status": "v49_12_amphibious_landing_boundary_fix",
-        "message": f"最终判定：{category} / {class_name}。{reason}",
-        "alternatives": old_final.get("alternatives", {}) if isinstance(old_final, dict) else {},
-    }
-    result["v49_12_amphibious_landing_boundary_fix"] = {
-        "applied": True,
-        "category": category,
-        "class_name": class_name,
-        "reason": reason,
-    }
-    return result
-
-
-def v49_12_amphibious_landing_boundary_fix(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """黄蜂 / 圣安东尼奥 / 惠德比岛之间的窄范围边界修正。"""
-    if not isinstance(result, dict):
-        return result
-
-    text = v49_11_text(observed)
-    flags = v49_12_text_flags(text)
-    final = result.get("final_decision") or {}
-    result_type = clean_text(final.get("result_type") or "")
-    class_name = v49_11_final_class(result)
-    category = v49_11_final_category(result)
-    confidence = v49_1_float(final.get("confidence", 0.0))
-
-    # 1) 圣安东尼奥误判为黄蜂：如果明确“不是全通甲板两栖攻击舰”，且具备 LPD 结构，不应判黄蜂。
-    if class_name == "黄蜂级两栖攻击舰":
-        if flags["no_full_deck"] and flags["well_deck"] and (flags["stern_opening"] or flags["landing_primary"]):
-            return v49_12_set_known_class(
-                result,
-                "登陆舰",
-                "惠德比岛级船坞登陆舰",
-                "v49.12：文本明确排除全通飞行甲板/STOVL，并以坞舱、艉门和登陆艇收放为主要证据，改判为船坞登陆舰。",
-                confidence,
-            )
-        if flags["no_full_deck"] and (flags["lpd_positive"] or (flags["large_superstructure"] and flags["heli_platform_or_hangar"])):
-            return v49_12_set_known_class(
-                result,
-                "两栖舰",
-                "圣安东尼奥级两栖船坞运输舰",
-                "v49.12：文本排除全通甲板两栖攻击舰，并呈现大型上层建筑、直升机平台/机库等 LPD 特征，改判为圣安东尼奥级。",
-                confidence,
-            )
-
-    # 2) 黄蜂误判为圣安东尼奥：全通/贯通甲板、垂直起降/航空突击是黄蜂级两栖攻击舰关键证据。
-    if class_name == "圣安东尼奥级两栖船坞运输舰":
-        if (flags["full_deck_positive"] or flags["stovl_positive"] or flags["wasp_mission"]) and not flags["no_full_deck"]:
-            if flags["wasp_mission"] or flags["stovl_positive"] or flags["full_deck_positive"]:
-                return v49_12_set_known_class(
-                    result,
-                    "两栖舰",
-                    "黄蜂级两栖攻击舰",
-                    "v49.12：文本包含全通/贯通飞行甲板、两栖攻击/航空突击或 STOVL 垂直起降证据，优先判为黄蜂级两栖攻击舰。",
-                    confidence,
-                )
-
-    # 3) 圣安东尼奥误判为惠德比岛：大型上层建筑 + 直升机平台/机库 + 车辆/货物/人员运输，尤其“不是纯船坞登陆舰”。
-    if class_name == "惠德比岛级船坞登陆舰":
-        san_evidence = (
-            flags["lpd_positive"]
-            or (flags["large_superstructure"] and flags["heli_platform_or_hangar"])
-            or (flags["transport_space"] and flags["heli_platform_or_hangar"])
-        )
-        if san_evidence and not flags["pure_landing_negative_for_lpd"]:
-            return v49_12_set_known_class(
-                result,
-                "两栖舰",
-                "圣安东尼奥级两栖船坞运输舰",
-                "v49.12：文本呈现 LPD/两栖船坞运输特征，包括大型上层建筑、直升机平台/机库和车辆/货物运输空间，不应按纯船坞登陆舰处理。",
-                confidence,
-            )
-
-    # 4) category_unknown 的已知样本恢复：仅限很强的两栖/登陆结构证据。
-    if result_type == "category_unknown":
-        if category in {"登陆舰", "两栖舰"} and (flags["wasp_mission"] or flags["stovl_positive"] or flags["full_deck_positive"]) and not flags["no_full_deck"]:
-            return v49_12_set_known_class(
-                result,
-                "两栖舰",
-                "黄蜂级两栖攻击舰",
-                "v49.12：类别内未知结果中存在航空突击/两栖攻击或全通飞行甲板/STOVL 强证据，恢复为黄蜂级。",
-                confidence,
-            )
-        if category == "航空母舰" and flags["no_full_deck"] and (flags["large_superstructure"] or flags["stern_opening"]) and flags["heli_platform_or_hangar"]:
-            return v49_12_set_known_class(
-                result,
-                "两栖舰",
-                "圣安东尼奥级两栖船坞运输舰",
-                "v49.12：文本明确不是航母全通大甲板，同时具备大型上层建筑、直升机平台和舰尾开口等 LPD 证据，恢复为圣安东尼奥级。",
-                confidence,
-            )
-        if category == "登陆舰" and flags["no_full_deck"] and (flags["landing_primary"] or (flags["well_deck"] and flags["stern_opening"])):
-            return v49_12_set_known_class(
-                result,
-                "登陆舰",
-                "惠德比岛级船坞登陆舰",
-                "v49.12：登陆舰类别内未知结果中存在船坞登陆平台、无全通飞行甲板/STOVL和登陆艇收放证据，恢复为惠德比岛级。",
-                confidence,
-            )
-
-    result["v49_12_amphibious_landing_boundary_fix"] = {
-        "applied": False,
-        "reason": "no_amphibious_landing_boundary_triggered",
-        "class_name": class_name,
-        "category": category,
-        "confidence": round(confidence, 4),
-    }
-    return result
-
-
-def hierarchical_class_match(
-    class_data_path: str,
-    observed_attributes: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
-    """v49.12：在 v49.11 基础上修复黄蜂/圣安东尼奥/惠德比岛边界。"""
-    result = _hierarchical_class_match_v49_11_base(class_data_path, observed_attributes)
-    result = v49_12_amphibious_landing_boundary_fix(result, observed_attributes)
-    return result
-
-
-# ==================== v49.16: surface-combatant parameter/category boundary fix ====================
-# 目标：基于 v49.12，先不再恢复 known_class，只处理“类别内未知/开放集”的水面作战舰大类边界。
-# 背景：
-# - 诊断显示剩余错误里较多是 unknown -> unknown 但大类错，尤其护卫舰/驱逐舰/巡洋舰边界。
-# - 参数型文本（长度、排水量、垂发数量、乘员、续航）经常被现有规则误吸到巡洋舰/航空母舰/驱逐舰。
-# 约束：
-# - 只改 category_unknown/open-set 的 primary_category；
-# - 不填 pred_known_class，不恢复阿利·伯克/独立级；
-# - 不触碰已经明确 known_class 的结果，避免破坏 v49.11/v49.12 的 open-set 保护。
-
-_hierarchical_class_match_v49_12_base = hierarchical_class_match
-
-
-def v49_16_number_patterns(text: str) -> Dict[str, List[float]]:
-    """从原文里抽取少量对水面作战舰边界有用的数值。"""
-    t = str(text or "")
-    nums = {"length_m": [], "displacement_t": [], "crew": [], "vls_cells": []}
-
-    # 舰长 / 长度
-    for m in re.finditer(r"(?:舰长|全长|长度|长)\s*(?:约|为)?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:m|米)", t, flags=re.I):
-        try:
-            nums["length_m"].append(float(m.group(1)))
-        except Exception:
-            pass
-
-    # 满载/标准/排水量
-    for m in re.finditer(r"(?:满载排水量|标准排水量|排水量)\s*(?:约|为)?\s*([0-9]+(?:\.[0-9]+)?)\s*吨", t):
-        try:
-            nums["displacement_t"].append(float(m.group(1)))
-        except Exception:
-            pass
-
-    # 乘员
-    for m in re.finditer(r"(?:乘员|舰员|船员)\s*(?:约|为)?\s*([0-9]+)\s*人", t):
-        try:
-            nums["crew"].append(float(m.group(1)))
-        except Exception:
-            pass
-
-    # 垂发单元/具/个
-    for m in re.finditer(r"([0-9]+)\s*(?:单元|具|个)\s*(?:Mk\s*41|MK41|垂直发射|垂发)", t, flags=re.I):
-        try:
-            nums["vls_cells"].append(float(m.group(1)))
-        except Exception:
-            pass
-    for m in re.finditer(r"(?:Mk\s*41|MK41|垂直发射|垂发)[^0-9]{0,8}([0-9]+)\s*(?:单元|具|个)", t, flags=re.I):
-        try:
-            nums["vls_cells"].append(float(m.group(1)))
-        except Exception:
-            pass
-    # 12组八联装 -> 96；2组八联装 -> 16
-    for m in re.finditer(r"([0-9]+)\s*组\s*八联装", t):
-        try:
-            nums["vls_cells"].append(float(m.group(1)) * 8.0)
-        except Exception:
-            pass
-
-    return nums
-
-
-def v49_16_is_open_category_only(result: Dict[str, Any]) -> bool:
-    """只允许处理类别内未知/open-set，不处理已知类。"""
-    if not isinstance(result, dict):
-        return False
-    final = result.get("final_decision") or {}
-    known = result.get("known_class_result") or {}
-    open_set = result.get("open_set_result") or {}
-    result_type = clean_text(final.get("result_type") or "")
-    primary_class = clean_text(final.get("primary_class") or "")
-    known_label = clean_text(known.get("label") or known.get("ship_class") or "") if isinstance(known, dict) else ""
-
-    if primary_class not in V49_1_UNKNOWN_LABELS:
-        return False
-    if known_label not in V49_1_UNKNOWN_LABELS:
-        return False
-    return bool(open_set.get("is_unknown", False)) or result_type in {"category_unknown", "ambiguous_category", "category_only"}
-
-
-def v49_16_surface_scores(text: str) -> Dict[str, Dict[str, Any]]:
-    """给护卫舰/驱逐舰/巡洋舰做保守的大类边界打分。只用于 category_unknown。"""
-    scores = {
-        "护卫舰": {"score": 0.0, "evidence": []},
-        "驱逐舰": {"score": 0.0, "evidence": []},
-        "巡洋舰": {"score": 0.0, "evidence": []},
-    }
-
-    def add(cat: str, value: float, ev: str):
-        scores[cat]["score"] += float(value)
-        scores[cat]["evidence"].append(ev)
-
-    nums = v49_16_number_patterns(text)
-    lengths = nums["length_m"]
-    disps = nums["displacement_t"]
-    crews = nums["crew"]
-    vls_cells = nums["vls_cells"]
-    max_len = max(lengths) if lengths else None
-    max_disp = max(disps) if disps else None
-    max_vls = max(vls_cells) if vls_cells else None
-    max_crew = max(crews) if crews else None
-
-    # 1. 显式大类词：只修大类，不恢复舰级。
-    if v49_11_has_any(text, ["大型导弹驱逐舰", "大型防空驱逐舰", "防空驱逐舰", "导弹驱逐舰"]):
-        add("驱逐舰", 9.0, "explicit_destroyer_word")
-    elif v49_11_has_any(text, ["驱逐舰"]):
-        add("驱逐舰", 6.0, "explicit_destroyer_word")
-
-    if v49_11_has_any(text, ["护卫舰", "巡防舰", "反潜护卫", "通用护卫"]):
-        add("护卫舰", 8.0, "explicit_frigate_word")
-    if v49_11_has_any(text, ["中型军舰", "中型舰艇", "中型水面舰艇", "中型水面作战舰"]):
-        add("护卫舰", 5.0, "medium_ship_word")
-    if v49_11_has_any(text, ["巡洋舰"]):
-        add("巡洋舰", 7.0, "explicit_cruiser_word")
-
-    # 2. 参数区间：这是本轮新增重点。参数只修大类，不闭集。
-    if max_disp is not None:
-        if max_disp <= 4200:
-            add("护卫舰", 8.0, f"small_displacement_{max_disp:g}t")
-        elif max_disp <= 7000:
-            add("护卫舰", 6.0, f"medium_displacement_{max_disp:g}t")
-        elif max_disp <= 10500:
-            add("驱逐舰", 5.0, f"destroyer_scale_displacement_{max_disp:g}t")
-        elif max_disp >= 11000:
-            add("巡洋舰", 5.0, f"cruiser_scale_displacement_{max_disp:g}t")
-
-    if max_len is not None:
-        if max_len <= 135:
-            add("护卫舰", 6.0, f"frigate_length_{max_len:g}m")
-        elif max_len <= 155:
-            add("护卫舰", 4.0, f"medium_frigate_length_{max_len:g}m")
-        elif max_len <= 175:
-            add("驱逐舰", 4.0, f"destroyer_length_{max_len:g}m")
-        elif max_len >= 180:
-            add("巡洋舰", 3.0, f"large_surface_length_{max_len:g}m")
-
-    if max_crew is not None:
-        if max_crew <= 180:
-            add("护卫舰", 4.0, f"small_crew_{max_crew:g}")
-        elif max_crew <= 330:
-            add("驱逐舰", 3.0, f"destroyer_crew_{max_crew:g}")
-
-    if v49_11_has_any(text, ["三千多吨", "3000多吨", "三千余吨", "3000余吨", "3650吨", "3600吨", "6200吨"]):
-        add("护卫舰", 5.0, "explicit_frigate_scale_text")
-
-    # 3. 垂发/武器传感器：共享区分特征只修大类。
-    if max_vls is not None:
-        if max_vls <= 24:
-            add("护卫舰", 5.0, f"small_vls_{max_vls:g}")
-        elif max_vls <= 48:
-            add("驱逐舰", 3.0, f"medium_vls_{max_vls:g}")
-        elif 70 <= max_vls <= 100:
-            add("驱逐舰", 7.0, f"destroyer_vls_{max_vls:g}")
-        elif max_vls >= 110:
-            add("巡洋舰", 8.0, f"cruiser_vls_{max_vls:g}")
-
-    if v49_11_has_any(text, ["90单元", "90具", "90个", "90具左右", "90单元左右", "96单元", "96具", "前后垂发", "前后甲板布置大量垂直发射"]):
-        add("驱逐舰", 6.0, "large_destroyer_vls_text")
-    if v49_11_has_any(text, ["122单元", "122具", "12组八联装", "舰队指挥"]):
-        add("巡洋舰", 6.0, "cruiser_vls_or_command_text")
-    if v49_11_has_any(text, ["16单元", "2组八联装", "两组八联装", "少量垂发", "有限垂发"]):
-        add("护卫舰", 4.0, "small_vls_text")
-
-    if v49_11_has_any(text, ["宙斯盾", "SPY", "AN/SPY", "相控阵雷达", "区域防空", "弹道导弹防御"]):
-        # 如果同时有“驱逐舰”或 90 单元级证据，偏驱逐；否则只给弱支持，避免直接闭集。
-        if scores["驱逐舰"]["score"] >= scores["巡洋舰"]["score"]:
-            add("驱逐舰", 2.5, "aegis_or_area_air_defense_shared")
-        else:
-            add("巡洋舰", 2.0, "aegis_or_area_air_defense_shared")
-
-    if v49_11_has_any(text, ["反潜直升机", "反舰导弹", "鱼雷管", "近防炮", "CODLOG", "MT30"]):
-        add("护卫舰", 2.0, "frigate_littoral_or_escort_shared")
-
-    # 4. 反向排除：小吨位/短舰体强烈排除巡洋舰；大型防空驱逐舰排除护卫舰。
-    if (max_disp is not None and max_disp <= 7000) or (max_len is not None and max_len <= 155):
-        scores["巡洋舰"]["score"] -= 4.0
-        scores["巡洋舰"]["evidence"].append("negative_for_cruiser_medium_scale")
-    if v49_11_has_any(text, ["明显大于普通护卫舰", "比普通护卫舰更大", "大型防空驱逐舰", "大型导弹驱逐舰"]):
-        scores["护卫舰"]["score"] -= 3.5
-        scores["护卫舰"]["evidence"].append("negative_for_frigate_large_destroyer_cue")
-        add("驱逐舰", 3.0, "large_destroyer_relative_cue")
-    if v49_11_has_any(text, ["不是航母", "不像航母", "没有全通飞行甲板", "无全通飞行甲板", "没有弹射器", "没有拦阻索"]):
-        # 这里不直接给水面舰加太多分，只是防止被航空母舰方向吸走时允许纠偏。
-        add("驱逐舰", 0.5, "negative_for_carrier_surface_context")
-        add("护卫舰", 0.5, "negative_for_carrier_surface_context")
-
-    for c in scores:
-        scores[c]["score"] = round(scores[c]["score"], 4)
-    return scores
-
-
-def v49_16_set_category_unknown(result: Dict[str, Any], category: str, reason: str, confidence: float, debug: Dict[str, Any]) -> Dict[str, Any]:
-    old_final = result.get("final_decision") or {}
-    result["category_result"] = {
-        "label": category,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_16_surface_parameter_category",
-        "reason": reason,
-    }
-    result["known_class_result"] = None
-    result["open_set_result"] = {
-        "is_unknown": True,
-        "unknown_scope": UNKNOWN_OUTPUT_TEMPLATE.format(category=category),
-        "reason": reason,
-    }
-    result["final_decision"] = {
-        "result_type": "category_unknown",
-        "primary_category": category,
-        "primary_class": None,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_16_surface_parameter_category_fix",
-        "message": f"最终判定：{category}类别内未知类。{reason}",
-        "alternatives": old_final.get("alternatives", {}) if isinstance(old_final, dict) else {},
-    }
-    result["v49_16_surface_parameter_category_fix"] = {"applied": True, **debug}
-    return result
-
-
-def v49_16_surface_parameter_category_fix(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """修正开放集/类别内未知结果中的护卫舰/驱逐舰/巡洋舰参数边界。"""
-    if not v49_16_is_open_category_only(result):
-        result["v49_16_surface_parameter_category_fix"] = {"applied": False, "reason": "not_open_category_only"}
-        return result
-
-    final = result.get("final_decision") or {}
-    cat_res = result.get("category_result") or {}
-    current_cat = clean_text(final.get("primary_category") or cat_res.get("label") or "")
-    text = v49_11_text(observed)
-    scores = v49_16_surface_scores(text)
-    ranked = sorted(scores, key=lambda c: float(scores[c]["score"]), reverse=True)
-    top_cat = ranked[0]
-    second_cat = ranked[1] if len(ranked) > 1 else ""
-    top_score = float(scores[top_cat]["score"])
-    second_score = float(scores[second_cat]["score"]) if second_cat else 0.0
-    current_score = float(scores.get(current_cat, {}).get("score", 0.0)) if current_cat in scores else 0.0
-
-    # 不处理证据太弱的样本。弱 VLM 描述如果没有参数/显式类别，继续保持原结果，避免过拟合。
-    top_ev = scores[top_cat]["evidence"]
-    has_explicit_or_parameter = any(
-        key in ev
-        for ev in top_ev
-        for key in [
-            "explicit_", "length_", "displacement_", "crew_", "vls_", "scale_text",
-            "large_destroyer_relative_cue",
-        ]
-    )
-
-    allow = (
-        top_cat != current_cat
-        and top_score >= 7.0
-        and top_score - max(second_score, current_score) >= 2.5
-        and has_explicit_or_parameter
-    )
-
-    debug = {
-        "reason": "surface_parameter_boundary_checked",
-        "current_category": current_cat,
-        "top_category": top_cat,
-        "second_category": second_cat,
-        "top_score": round(top_score, 4),
-        "second_score": round(second_score, 4),
-        "current_score": round(current_score, 4),
-        "top_evidence": top_ev[:12],
-        "scores": {c: scores[c]["score"] for c in scores},
-    }
-
-    if not allow:
-        result["v49_16_surface_parameter_category_fix"] = {"applied": False, **debug}
-        return result
-
-    conf = max(
-        v49_1_float(final.get("confidence", 0.0)),
-        v49_1_float(cat_res.get("confidence", 0.0)),
-        min(0.94, 0.58 + top_score / 45.0),
-    )
-    return v49_16_set_category_unknown(
-        result,
-        top_cat,
-        "v49.16：依据显式舰种词、长度/排水量/乘员/垂发数量等参数型证据，只修正水面作战舰大类，仍保持类别内未知。",
-        conf,
-        debug,
-    )
-
-
-
-# ============================================================
-# V49.18: evidence-profile guided precise known-class recovery
-# ============================================================
-
-def v49_18_has_any(text: str, terms: List[str]) -> bool:
-    return v49_11_has_any(text, terms)
-
-
-def v49_18_has_independence_negative(text: str) -> bool:
-    """明确否定独立级/三体濒海战斗舰时，不进行独立级恢复。"""
-    negatives = [
-        "不是独立级", "不像独立级", "非独立级",
-        "不是三体濒海战斗舰", "不像三体濒海战斗舰",
-        "不是三体舰", "不像三体舰", "不是三体船", "不像三体船",
-        "没有三体船结构", "未见三体船结构", "未观察到三体船结构",
-        "没有三体结构", "未见三体结构", "未观察到三体结构",
-        "没有多体结构", "未见多体结构",
-    ]
-    return v49_18_has_any(text, negatives)
-
-
-def v49_18_has_arleigh_negative(text: str) -> bool:
-    """明确否定阿利·伯克/宙斯盾驱逐舰方向，或出现强烈异类结构时，不进行阿利·伯克恢复。"""
-    negatives = [
-        "不是阿利·伯克", "不像阿利·伯克", "非阿利·伯克",
-        "不是阿利伯克", "不像阿利伯克", "非阿利伯克",
-        "无宙斯盾", "没有宙斯盾", "未见宙斯盾",
-        "无相控阵", "没有相控阵", "未见相控阵",
-        "无垂发", "没有垂发", "未见垂发",
-        "无主炮", "没有主炮", "未见主炮",
-        "三体船", "三体结构", "两边支撑船体", "支撑船体",
-        "全通飞行甲板", "弹射器", "拦阻索", "大型坞舱", "艉门",
-        "船坞登陆舰", "两栖攻击舰", "两栖船坞运输舰",
-        "122单元", "122具", "12组八联装",
-    ]
-    return v49_18_has_any(text, negatives)
-
-
-def v49_18_current_open_unknown_category(result: Dict[str, Any], category: str) -> bool:
-    """只在当前已经是该大类的 category_unknown 时做极窄恢复。"""
-    if not isinstance(result, dict):
-        return False
-    final = result.get("final_decision") or {}
-    known = result.get("known_class_result") or {}
-    open_set = result.get("open_set_result") or {}
-    current_cat = clean_text(final.get("primary_category") or (result.get("category_result") or {}).get("label") or "")
-    primary_class = clean_text(final.get("primary_class") or "")
-    known_label = clean_text(known.get("label") or known.get("ship_class") or "") if isinstance(known, dict) else ""
-    result_type = clean_text(final.get("result_type") or "")
-    if current_cat != category:
-        return False
-    if primary_class not in V49_1_UNKNOWN_LABELS:
-        return False
-    if known_label not in V49_1_UNKNOWN_LABELS:
-        return False
-    return bool(open_set.get("is_unknown", False)) or result_type == "category_unknown"
-
-
-
-# ==================== v49.19: Arleigh unknown-neighbor guard ====================
-# 目标：基于 v49.18，只修复其新增的阿利·伯克误恢复副作用。
-# 核心问题：普通 substring 匹配会把“没有机库”当成“机库”，
-# 也会把“没有给出SPY-1D或Flight IIA”当成显式强证据。
-# 因此对阿利·伯克恢复证据做“否定上下文”过滤：
-# - 非否定出现的 Mk41 / 127mm / 直升机机库 / SPY/Flight 才算正证据；
-# - 含“没有机库”“没有给出SPY/Flight”等近邻反证时，不触发恢复。
-
-
-def v49_19_find_non_negated(text: str, terms: List[str]) -> bool:
-    """查找非否定上下文中的证据词，避免把“没有X/未见X/没有给出X”当正证据。"""
-    t = str(text or "")
-    if not t:
-        return False
-    negators = [
-        "没有", "没看到", "没有看到", "未见", "未观察到", "未给出", "没有给出",
-        "无", "缺少", "不具备", "不含", "不是", "不像", "未显示", "未提及", "看不出",
-    ]
-    for term in terms:
-        term = str(term or "")
-        if not term:
-            continue
-        start = 0
-        while True:
-            idx = t.find(term, start)
-            if idx < 0:
-                break
-            left = t[max(0, idx - 12):idx]
-            local = t[max(0, idx - 12): min(len(t), idx + len(term) + 8)]
-            negated = any(neg in left or neg in local[:12] for neg in negators)
-            # “不是普通单体船”这类否定不应影响 unrelated term；这里仅过滤当前 term 的近邻。
-            if not negated:
-                return True
-            start = idx + len(term)
-    return False
-
-
-def v49_19_has_arleigh_neighbor_block(text: str) -> bool:
-    """针对未知驱逐舰近邻样本的窄反证：缺少机库或明确没有给出SPY/Flight具体信息。"""
-    t = str(text or "")
-    if not t:
-        return False
-    hard_blocks = [
-        "没有机库", "无机库", "未见机库", "未观察到机库", "没有直升机机库", "无直升机机库",
-        "没有给出SPY", "未给出SPY", "没有给出 SPY", "未给出 SPY",
-        "没有给出SPY-1D", "未给出SPY-1D",
-        "没有给出Flight", "未给出Flight", "没有给出 Flight", "未给出 Flight",
-        "没有给出Flight IIA", "未给出Flight IIA", "没有给出Flight III", "未给出Flight III",
-        "没有给出SPY-1D或Flight", "没有给出SPY-1D或Flight IIA",
-    ]
-    return v49_18_has_any(t, hard_blocks)
-
-def v49_18_arleigh_recovery_evidence(text: str) -> Tuple[bool, List[str]]:
-    """v49.19：阿利·伯克只接受非否定的显式证据或强组合证据。
-
-    关键修正：
-    - “没有机库”不能被当成“有机库”；
-    - “没有给出SPY-1D或Flight IIA”不能被当成“有SPY-1D/Flight IIA”；
-    - 仍保留 known_arleigh_burke_anchor_008 这类 Mk41 + 127mm + 直升机机库强组合恢复。
-    """
-    ev: List[str] = []
-    if v49_18_has_arleigh_negative(text):
-        return False, ["blocked_by_arleigh_negative_or_conflict"]
-
-    # 未知驱逐舰近邻保护：这些文本通常只有共享区分特征，或明确缺少阿利·伯克专属信息。
-    if v49_19_has_arleigh_neighbor_block(text):
-        return False, ["blocked_by_v49_19_arleigh_neighbor_counter_evidence"]
-
-    explicit = v49_19_find_non_negated(text, [
-        "阿利·伯克", "阿利伯克", "伯克级", "DDG-51", "DDG51",
-        "Flight IIA", "Flight III", "flight iia", "flight iii",
-    ])
-    if explicit:
-        ev.append("explicit_arleigh_name_or_hull_code_non_negated")
-        return True, ev
-
-    has_mk41 = v49_19_find_non_negated(text, [
-        "Mk41", "Mk 41", "MK41", "MK 41", "前后为Mk41", "前后 Mk41", "前后MK41"
-    ])
-    has_127 = v49_19_find_non_negated(text, ["127mm", "127毫米", "127 mm"])
-    has_hangar = v49_19_find_non_negated(text, ["直升机机库", "舰尾机库", "后部机库", "双机库", "机库"])
-    has_fore_aft = v49_19_find_non_negated(text, ["前后垂发", "前后为Mk41垂发区", "前后为 MK41 垂发区", "前后甲板", "前后垂直发射"])
-    has_aegis = v49_19_find_non_negated(text, ["宙斯盾", "Aegis", "SPY-1", "SPY-6", "AN/SPY"])
-
-    # 最安全的图像/结构组合：Mk41 + 127mm + 明确直升机机库。
-    if has_mk41 and has_127 and has_hangar:
-        ev.extend(["mk41_non_negated", "127mm_non_negated", "helicopter_hangar_non_negated"])
-        return True, ev
-
-    # 更严格的补充组合：前后垂发 + 127mm + 直升机机库 + 宙斯盾/SPY。
-    if has_fore_aft and has_127 and has_hangar and has_aegis:
-        ev.extend(["fore_aft_vls_non_negated", "127mm_non_negated", "helicopter_hangar_non_negated", "aegis_or_spy_non_negated"])
-        return True, ev
-
-    return False, ev or ["insufficient_arleigh_combo_v49_19"]
-
-
-def v49_18_independence_recovery_evidence(text: str) -> Tuple[bool, List[str]]:
-    """独立级只接受显式名称、典型参数组合，或三体/支撑船体 + 多项辅助证据。"""
-    ev: List[str] = []
-    if v49_18_has_independence_negative(text):
-        return False, ["blocked_by_independence_negative"]
-
-    explicit = v49_18_has_any(text, ["独立级", "LCS-2", "LCS 2", "Independence"])
-    if explicit:
-        ev.append("explicit_independence_name_or_hull_code")
-        return True, ev
-
-    has_75 = v49_18_has_any(text, ["75人", "75 人", "约75人", "乘员约75"])
-    has_4300 = v49_18_has_any(text, ["4300海里", "4300 海里"])
-    has_57 = v49_18_has_any(text, ["57mm", "57毫米", "57 mm"])
-    has_ram = v49_18_has_any(text, ["RAM", "拉姆"])
-    has_mh60 = v49_18_has_any(text, ["MH-60", "MH60"])
-    if has_75 and has_4300 and has_57 and (has_ram or has_mh60):
-        ev.extend(["crew_75", "range_4300nm", "57mm", "ram_or_mh60"])
-        return True, ev
-
-    has_trihull = v49_18_has_any(text, [
-        "三体船", "三体结构", "三体舰", "三体船轮廓", "多体结构",
-        "左右支撑结构", "两边支撑船体", "支撑船体", "不是普通单体船",
-    ])
-    aux = []
-    if has_57 or v49_18_has_any(text, ["小口径舰炮", "一门小炮", "船头有一门小炮", "57mm级舰炮"]):
-        aux.append("57mm_or_small_gun")
-    if v49_18_has_any(text, ["直升机平台", "直升机甲板", "停直升机", "宽舰尾平台", "舰尾平台", "后面能停直升机"]):
-        aux.append("helicopter_or_wide_stern_platform")
-    if v49_18_has_any(text, ["模块化", "任务模块", "濒海作战", "近海作战", "高速近海", "速度很快"]):
-        aux.append("mission_module_or_littoral_high_speed")
-    if has_ram or has_mh60:
-        aux.append("ram_or_mh60")
-
-    # 三体/支撑船体 + 至少两项辅助证据，避免未知三体/相似护卫舰被误闭集。
-    if has_trihull and len(set(aux)) >= 2:
-        ev.append("trihull_or_supporting_hulls")
-        ev.extend(sorted(set(aux)))
-        return True, ev
-
-    return False, ev or ["insufficient_independence_combo"]
-
-
-def v49_18_set_known_class(
-    result: Dict[str, Any],
-    category: str,
-    known_class: str,
-    confidence: float,
-    reason: str,
-    evidence: List[str],
-) -> Dict[str, Any]:
-    old_final = result.get("final_decision") or {}
-    result["category_result"] = {
-        "label": category,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_18_precise_known_recovery",
-        "reason": reason,
-    }
-    result["known_class_result"] = {
-        "label": known_class,
-        "ship_class": known_class,
-        "category": category,
-        "confidence": round(float(confidence), 4),
-        "known_status": "Known",
-        "status": "v49_18_precise_known_recovery",
-        "reason": reason,
-    }
-    result["open_set_result"] = {
-        "is_unknown": False,
-        "unknown_scope": None,
-        "reason": reason,
-    }
-    result["final_decision"] = {
-        "result_type": "known_class",
-        "primary_category": category,
-        "primary_class": known_class,
-        "confidence": round(float(confidence), 4),
-        "status": "v49_18_precise_known_recovery",
-        "message": f"最终判定：{category} / {known_class}。{reason}",
-        "alternatives": old_final.get("alternatives", {}) if isinstance(old_final, dict) else {},
-    }
-    result["v49_18_precise_known_recovery"] = {
-        "applied": True,
-        "category": category,
-        "known_class": known_class,
-        "evidence": evidence,
-        "reason": reason,
-    }
-    return result
-
-
-def v49_18_precise_known_recovery(result: Dict[str, Any], observed: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    v49.18：基于 evidence_profile 的极窄 known-class 恢复。
-    只恢复强组合/显式名称证据，不恢复仅共享区分特征。
-    """
-    text = v49_11_text(observed)
-    # 文本明确 unknown / 未收录 / 非已知时，不做已知类恢复。
-    if v49_18_has_any(text, ["未知类", "类别内未知", "未收录", "非已知", "不是已知", "不像已知", "未知驱逐舰", "未知护卫舰"]):
-        result["v49_18_precise_known_recovery"] = {"applied": False, "reason": "explicit_unknown_text"}
-        return result
-
-    if v49_18_current_open_unknown_category(result, "驱逐舰"):
-        ok, ev = v49_18_arleigh_recovery_evidence(text)
-        if ok:
-            conf = max(
-                v49_1_float((result.get("final_decision") or {}).get("confidence", 0.0)),
-                0.91,
-            )
-            return v49_18_set_known_class(
-                result,
-                "驱逐舰",
-                "阿利·伯克级驱逐舰",
-                conf,
-                "v49.18：当前为驱逐舰类别内未知，但文本具备阿利·伯克级显式名称或 Mk41+127mm+直升机机库等强组合证据，且无强反证，安全恢复为已知舰级。",
-                ev,
-            )
-
-    if v49_18_current_open_unknown_category(result, "护卫舰"):
-        ok, ev = v49_18_independence_recovery_evidence(text)
-        if ok:
-            conf = max(
-                v49_1_float((result.get("final_decision") or {}).get("confidence", 0.0)),
-                0.90,
-            )
-            return v49_18_set_known_class(
-                result,
-                "护卫舰",
-                "独立级濒海战斗舰",
-                conf,
-                "v49.18：当前为护卫舰类别内未知，但文本具备独立级显式名称、典型参数组合或三体结构+多项辅助证据，且无强反证，安全恢复为已知舰级。",
-                ev,
-            )
-
-    result["v49_18_precise_known_recovery"] = {"applied": False, "reason": "no_safe_recovery_evidence"}
-    return result
-
-
-
-def hierarchical_class_match(
-    class_data_path: str,
-    observed_attributes: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
-    """v49.19：在 v49.18 基础上，给阿利·伯克恢复逻辑增加未知驱逐舰近邻保护。"""
-    result = _hierarchical_class_match_v49_12_base(class_data_path, observed_attributes)
-    result = v49_16_surface_parameter_category_fix(result, observed_attributes)
-    result = v49_18_precise_known_recovery(result, observed_attributes)
-    result["v49_19_arleigh_unknown_neighbor_guard"] = {"version": "v49.19", "note": "arleigh recovery uses non-negated evidence matching"}
     return result
 
 

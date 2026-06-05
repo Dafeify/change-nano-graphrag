@@ -1,0 +1,15 @@
+﻿id,gold_category,gold_known_class,gold_open_set,pred_category,pred_known_class,pred_open_set,result_type,confidence,category_correct,known_class_correct,open_set_correct,exact_correct,dataset
+known_arleigh_burke_002,驱逐舰,阿利·伯克级驱逐舰,False,驱逐舰,,True,category_unknown,0.78,True,False,False,False,origin_80
+known_arleigh_burke_004,驱逐舰,阿利·伯克级驱逐舰,False,驱逐舰,,True,category_unknown,0.7246,True,False,False,False,origin_80
+known_arleigh_burke_006,驱逐舰,阿利·伯克级驱逐舰,False,驱逐舰,,True,category_unknown,0.9043,True,False,False,False,origin_80
+known_arleigh_burke_008,驱逐舰,阿利·伯克级驱逐舰,False,驱逐舰,,True,category_unknown,0.8831,True,False,False,False,origin_80
+known_independence_008,护卫舰,独立级濒海战斗舰,False,护卫舰,,True,category_unknown,1.0,True,False,False,False,origin_80
+known_san_antonio_001,两栖舰,圣安东尼奥级两栖船坞运输舰,False,两栖舰,黄蜂级两栖攻击舰,False,known_class,0.8589,True,False,True,False,origin_80
+unknown_destroyer_real_007,驱逐舰,,True,驱逐舰,阿利·伯克级驱逐舰,False,known_class,0.7892,True,False,False,False,origin_80
+unknown_destroyer_real_008,驱逐舰,,True,巡洋舰,,True,category_unknown,0.6768,False,True,True,False,origin_80
+unknown_frigate_a_real_008,护卫舰,,True,巡洋舰,,True,category_unknown,0.7127,False,True,True,False,origin_80
+known_arleigh_burke_test_004,驱逐舰,阿利·伯克级驱逐舰,False,驱逐舰,,True,category_unknown,0.6667,True,False,False,False,origin_100
+known_san_antonio_test_001,两栖舰,圣安东尼奥级两栖船坞运输舰,False,两栖舰,黄蜂级两栖攻击舰,False,known_class,0.8496,True,False,True,False,origin_100
+known_whidbey_island_test_006,登陆舰,惠德比岛级船坞登陆舰,False,两栖舰,圣安东尼奥级两栖船坞运输舰,False,known_class,0.8184,False,False,True,False,origin_100
+unknown_frigate_a_real_test_006,护卫舰,,True,驱逐舰,,True,category_unknown,0.852,False,True,True,False,origin_100
+known_independence_anchor_005,护卫舰,独立级濒海战斗舰,False,护卫舰,,True,category_unknown,0.7499,True,False,False,False,anchor_80

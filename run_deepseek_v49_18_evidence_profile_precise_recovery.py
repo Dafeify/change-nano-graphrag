@@ -7036,102 +7036,37 @@ def v49_18_current_open_unknown_category(result: Dict[str, Any], category: str) 
     return bool(open_set.get("is_unknown", False)) or result_type == "category_unknown"
 
 
-
-# ==================== v49.19: Arleigh unknown-neighbor guard ====================
-# 目标：基于 v49.18，只修复其新增的阿利·伯克误恢复副作用。
-# 核心问题：普通 substring 匹配会把“没有机库”当成“机库”，
-# 也会把“没有给出SPY-1D或Flight IIA”当成显式强证据。
-# 因此对阿利·伯克恢复证据做“否定上下文”过滤：
-# - 非否定出现的 Mk41 / 127mm / 直升机机库 / SPY/Flight 才算正证据；
-# - 含“没有机库”“没有给出SPY/Flight”等近邻反证时，不触发恢复。
-
-
-def v49_19_find_non_negated(text: str, terms: List[str]) -> bool:
-    """查找非否定上下文中的证据词，避免把“没有X/未见X/没有给出X”当正证据。"""
-    t = str(text or "")
-    if not t:
-        return False
-    negators = [
-        "没有", "没看到", "没有看到", "未见", "未观察到", "未给出", "没有给出",
-        "无", "缺少", "不具备", "不含", "不是", "不像", "未显示", "未提及", "看不出",
-    ]
-    for term in terms:
-        term = str(term or "")
-        if not term:
-            continue
-        start = 0
-        while True:
-            idx = t.find(term, start)
-            if idx < 0:
-                break
-            left = t[max(0, idx - 12):idx]
-            local = t[max(0, idx - 12): min(len(t), idx + len(term) + 8)]
-            negated = any(neg in left or neg in local[:12] for neg in negators)
-            # “不是普通单体船”这类否定不应影响 unrelated term；这里仅过滤当前 term 的近邻。
-            if not negated:
-                return True
-            start = idx + len(term)
-    return False
-
-
-def v49_19_has_arleigh_neighbor_block(text: str) -> bool:
-    """针对未知驱逐舰近邻样本的窄反证：缺少机库或明确没有给出SPY/Flight具体信息。"""
-    t = str(text or "")
-    if not t:
-        return False
-    hard_blocks = [
-        "没有机库", "无机库", "未见机库", "未观察到机库", "没有直升机机库", "无直升机机库",
-        "没有给出SPY", "未给出SPY", "没有给出 SPY", "未给出 SPY",
-        "没有给出SPY-1D", "未给出SPY-1D",
-        "没有给出Flight", "未给出Flight", "没有给出 Flight", "未给出 Flight",
-        "没有给出Flight IIA", "未给出Flight IIA", "没有给出Flight III", "未给出Flight III",
-        "没有给出SPY-1D或Flight", "没有给出SPY-1D或Flight IIA",
-    ]
-    return v49_18_has_any(t, hard_blocks)
-
 def v49_18_arleigh_recovery_evidence(text: str) -> Tuple[bool, List[str]]:
-    """v49.19：阿利·伯克只接受非否定的显式证据或强组合证据。
-
-    关键修正：
-    - “没有机库”不能被当成“有机库”；
-    - “没有给出SPY-1D或Flight IIA”不能被当成“有SPY-1D/Flight IIA”；
-    - 仍保留 known_arleigh_burke_anchor_008 这类 Mk41 + 127mm + 直升机机库强组合恢复。
-    """
+    """阿利·伯克只接受显式名称或很强的结构/武器组合，不接受普通“相控阵+垂发+主炮”。"""
     ev: List[str] = []
     if v49_18_has_arleigh_negative(text):
         return False, ["blocked_by_arleigh_negative_or_conflict"]
 
-    # 未知驱逐舰近邻保护：这些文本通常只有共享区分特征，或明确缺少阿利·伯克专属信息。
-    if v49_19_has_arleigh_neighbor_block(text):
-        return False, ["blocked_by_v49_19_arleigh_neighbor_counter_evidence"]
-
-    explicit = v49_19_find_non_negated(text, [
+    explicit = v49_18_has_any(text, [
         "阿利·伯克", "阿利伯克", "伯克级", "DDG-51", "DDG51",
         "Flight IIA", "Flight III", "flight iia", "flight iii",
     ])
     if explicit:
-        ev.append("explicit_arleigh_name_or_hull_code_non_negated")
+        ev.append("explicit_arleigh_name_or_hull_code")
         return True, ev
 
-    has_mk41 = v49_19_find_non_negated(text, [
-        "Mk41", "Mk 41", "MK41", "MK 41", "前后为Mk41", "前后 Mk41", "前后MK41"
-    ])
-    has_127 = v49_19_find_non_negated(text, ["127mm", "127毫米", "127 mm"])
-    has_hangar = v49_19_find_non_negated(text, ["直升机机库", "舰尾机库", "后部机库", "双机库", "机库"])
-    has_fore_aft = v49_19_find_non_negated(text, ["前后垂发", "前后为Mk41垂发区", "前后为 MK41 垂发区", "前后甲板", "前后垂直发射"])
-    has_aegis = v49_19_find_non_negated(text, ["宙斯盾", "Aegis", "SPY-1", "SPY-6", "AN/SPY"])
+    has_mk41 = v49_18_has_any(text, ["Mk41", "Mk 41", "MK41", "MK 41", "前后为Mk41", "前后 Mk41", "前后MK41"])
+    has_127 = v49_18_has_any(text, ["127mm", "127毫米", "127 mm"])
+    has_hangar = v49_18_has_any(text, ["直升机机库", "舰尾机库", "后部机库", "双机库", "机库"])
+    has_fore_aft = v49_18_has_any(text, ["前后垂发", "前后为Mk41垂发区", "前后为 MK41 垂发区", "前后甲板", "前后垂直发射"])
+    has_aegis = v49_18_has_any(text, ["宙斯盾", "Aegis", "SPY-1", "SPY-6", "AN/SPY"])
 
-    # 最安全的图像/结构组合：Mk41 + 127mm + 明确直升机机库。
+    # 最安全的图像/结构组合：Mk41 + 127mm + 直升机机库
     if has_mk41 and has_127 and has_hangar:
-        ev.extend(["mk41_non_negated", "127mm_non_negated", "helicopter_hangar_non_negated"])
+        ev.extend(["mk41", "127mm", "helicopter_hangar"])
         return True, ev
 
-    # 更严格的补充组合：前后垂发 + 127mm + 直升机机库 + 宙斯盾/SPY。
+    # 其次：前后垂发 + 127mm + 直升机机库 + 宙斯盾/SPY
     if has_fore_aft and has_127 and has_hangar and has_aegis:
-        ev.extend(["fore_aft_vls_non_negated", "127mm_non_negated", "helicopter_hangar_non_negated", "aegis_or_spy_non_negated"])
+        ev.extend(["fore_aft_vls", "127mm", "helicopter_hangar", "aegis_or_spy"])
         return True, ev
 
-    return False, ev or ["insufficient_arleigh_combo_v49_19"]
+    return False, ev or ["insufficient_arleigh_combo"]
 
 
 def v49_18_independence_recovery_evidence(text: str) -> Tuple[bool, List[str]]:
@@ -7277,11 +7212,10 @@ def hierarchical_class_match(
     class_data_path: str,
     observed_attributes: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """v49.19：在 v49.18 基础上，给阿利·伯克恢复逻辑增加未知驱逐舰近邻保护。"""
+    """v49.18：在 v49.16 基础上，按 evidence profile 只恢复极少数强证据已知类。"""
     result = _hierarchical_class_match_v49_12_base(class_data_path, observed_attributes)
     result = v49_16_surface_parameter_category_fix(result, observed_attributes)
     result = v49_18_precise_known_recovery(result, observed_attributes)
-    result["v49_19_arleigh_unknown_neighbor_guard"] = {"version": "v49.19", "note": "arleigh recovery uses non-negated evidence matching"}
     return result
 
 
