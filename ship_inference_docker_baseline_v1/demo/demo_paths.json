@@ -1,0 +1,7 @@
+{
+  "paths": [
+    ".\\sample_texts\\ship_001.txt",
+    ".\\sample_texts\\ship_002.txt",
+    ".\\sample_texts\\ship_003.txt"
+  ]
+}

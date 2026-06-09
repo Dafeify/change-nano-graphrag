@@ -4939,7 +4939,7 @@ def v32_direct_known_class(chosen_cat: str, observed: Dict[str, Dict[str, Any]],
             return "提康德罗加级导弹巡洋舰"
 
     if chosen_cat == "驱逐舰":
-        if v35_has_any(text, ["无直升机机库", "没有真正的直升机库", "没有机库"]):
+        if v35_has_any(text, ["无直升机机库", "没有真正的直升机库", "没有机库", "四角格子", "格子桅", "传统重型四角格子桅杆"]):
             # 这些是对阿利·伯克级“有机库/封闭桅杆”已知原型的反证，不补已知类。
             return None
         if v35_has_any(text, ["宙斯盾系统", "宙斯盾作战系统", "多用途导弹驱逐舰", "典型多用途导弹驱逐舰", "前后垂发阵列"]):
@@ -4974,7 +4974,8 @@ def v32_should_force_unknown(chosen_cat: str, known_cls: Optional[str], observed
         return True
 
     if known_cls == "阿利·伯克级驱逐舰":
-        # v49.21: 仅保留通用/已知类画像冲突，不使用未知类百科中的具体近邻特征词。
+        if v35_has_any(text, ["传统重型四角格子桅杆", "四角格子", "格子结构", "格子桅"]):
+            return True
         if v35_has_any(text, ["没有真正的直升机库", "没有机库", "无机库", "无直升机机库", "舰尾只有直升机平台"]):
             return True
         if v35_has_any(text, ["151米", "6200吨", "76毫米", "拖曳阵列声纳", "拖曳阵列声呐", "Mk 48防空垂直发射系统"]):
@@ -6362,6 +6363,7 @@ def v49_11_should_reject_arleigh(text: str, status: str, confidence: float) -> T
     ])
     counter_evidence = v49_11_has_any(text, [
         "没有机库", "无机库", "无直升机机库", "未观察到直升机库", "没有真正的直升机库", "舰尾只有直升机平台",
+        "传统重型四角格子桅杆", "四角格子", "格子桅", "格子结构",
         "有限垂发", "少量垂发", "少量垂直发射", "不像大型区域防空舰",
         "16单元", "12组八联装", "76毫米", "三千多吨", "3600吨", "3000吨",
     ])
@@ -7349,8 +7351,14 @@ def v49_20_has_arleigh_parameter_profile_conflict(text: str) -> Tuple[bool, List
     if has_len_161 and has_vls_90ish and (has_std_7250 or has_full_9485):
         return True, ev + ["arleigh_profile_combo_conflict"]
 
-    # v49.21: 不再使用未知近邻舰资料中的具体词作为反证，
-    # 避免把测试集未知类百科特征写入分类器。此处只保留通用参数画像冲突。
+    # 另一个开放集近邻：文本强调格子桅/非美制主炮等结构来源特征，同时又有宙斯盾/Mk41共享特征。
+    # 这类可以支持“宙斯盾驱逐舰”，但不应直接闭集成阿利·伯克。
+    has_lattice_or_foreign_gun = v49_11_has_any(t, [
+        "重型四角格子桅", "四角格子桅", "格子架桅杆", "格子桅杆", "传统格子桅杆", "格子桅",
+        "意大利造主炮", "奥托梅莱拉", "OTO", "奥托主炮",
+    ])
+    if has_lattice_or_foreign_gun and has_vls_90ish:
+        return True, ev + ["lattice_or_foreign_gun_with_aegis_vls"]
 
     return False, ev
 
@@ -7404,5 +7412,3 @@ def hierarchical_class_match(
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-# V49.21 no_unknown_prior_guard: removed unknown-neighbor-specific prior terms from Arleigh conflict guard.

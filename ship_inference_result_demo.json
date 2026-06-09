@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "file_path": "D:\\project\\PythonProjects\\nano-graphrag\\demo_ship_texts\\ship_001.txt",
+      "status": "success",
+      "category_result": "航空母舰",
+      "category_confidence": 1.0,
+      "small_class_result": "尼米兹级航空母舰",
+      "small_class_confidence": 0.8489
+    },
+    {
+      "file_path": "D:\\project\\PythonProjects\\nano-graphrag\\demo_ship_texts\\ship_002.txt",
+      "status": "success",
+      "category_result": "驱逐舰",
+      "category_confidence": 0.926,
+      "small_class_result": "阿利·伯克级驱逐舰",
+      "small_class_confidence": 0.9599
+    },
+    {
+      "file_path": "D:\\project\\PythonProjects\\nano-graphrag\\demo_ship_texts\\ship_003.txt",
+      "status": "success",
+      "category_result": "两栖舰",
+      "category_confidence": 0.8934,
+      "small_class_result": "圣安东尼奥级两栖船坞运输舰",
+      "small_class_confidence": 0.8934
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "id": "local_demo",
+      "path": ".\\demo_ship_texts\\ship_001.txt"
+    },
+    {
+      "id": "absolute_demo",
+      "path": "D:\\teacher_ship_texts\\ship_002.txt"
+    },
+    {
+      "id": "unc_demo",
+      "path": "\\\\server\\share\\ship_003.txt"
+    },
+    {
+      "id": "url_demo",
+      "url": "https://example.com/ship_004.txt"
+    }
+  ]
+}
